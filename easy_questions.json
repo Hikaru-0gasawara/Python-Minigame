@@ -1,0 +1,602 @@
+[
+  {
+    "question": "What color is the sky on a clear day?",
+    "answer": "blue"
+  },
+  {
+    "question": "What color are most leaves?",
+    "answer": "green"
+  },
+  {
+    "question": "What color is a ripe banana?",
+    "answer": "yellow"
+  },
+  {
+    "question": "What color is coal?",
+    "answer": "black"
+  },
+  {
+    "question": "What color is snow?",
+    "answer": "white"
+  },
+  {
+    "question": "What color is an orange fruit?",
+    "answer": "orange"
+  },
+  {
+    "question": "What color is a strawberry?",
+    "answer": "red"
+  },
+  {
+    "question": "What animal barks?",
+    "answer": "dog"
+  },
+  {
+    "question": "What animal meows?",
+    "answer": "cat"
+  },
+  {
+    "question": "What animal is known as the king of the jungle?",
+    "answer": "lion"
+  },
+  {
+    "question": "What animal has a long trunk?",
+    "answer": "elephant"
+  },
+  {
+    "question": "What animal hops and has a pouch?",
+    "answer": "kangaroo"
+  },
+  {
+    "question": "What animal is the fastest land animal?",
+    "answer": "cheetah"
+  },
+  {
+    "question": "What animal swims and has fins?",
+    "answer": "fish"
+  },
+  {
+    "question": "What is the capital of France?",
+    "answer": "paris"
+  },
+  {
+    "question": "What continent is Brazil in?",
+    "answer": "south america"
+  },
+  {
+    "question": "What planet do we live on?",
+    "answer": "earth"
+  },
+  {
+    "question": "What ocean is the largest?",
+    "answer": "pacific"
+  },
+  {
+    "question": "What is the capital of Japan?",
+    "answer": "tokyo"
+  },
+  {
+    "question": "Which country is known for the pyramids?",
+    "answer": "egypt"
+  },
+  {
+    "question": "What is the capital of Italy?",
+    "answer": "rome"
+  },
+  {
+    "question": "What is 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "What is 10 - 5?",
+    "answer": "5"
+  },
+  {
+    "question": "What is 3 \u00d7 3?",
+    "answer": "9"
+  },
+  {
+    "question": "What is 6 \u00f7 2?",
+    "answer": "3"
+  },
+  {
+    "question": "How many sides does a triangle have?",
+    "answer": "3"
+  },
+  {
+    "question": "What number comes after 9?",
+    "answer": "10"
+  },
+  {
+    "question": "What is 5 + 7?",
+    "answer": "12"
+  },
+  {
+    "question": "What do you use to write?",
+    "answer": "pen"
+  },
+  {
+    "question": "What device do you use to call someone?",
+    "answer": "phone"
+  },
+  {
+    "question": "What do you use to eat soup?",
+    "answer": "spoon"
+  },
+  {
+    "question": "What do you wear on your feet?",
+    "answer": "shoes"
+  },
+  {
+    "question": "What object tells time?",
+    "answer": "clock"
+  },
+  {
+    "question": "What do you use to cut paper?",
+    "answer": "scissors"
+  },
+  {
+    "question": "What do you use to brush your teeth?",
+    "answer": "toothbrush"
+  },
+  {
+    "question": "What gas do humans need to breathe?",
+    "answer": "oxygen"
+  },
+  {
+    "question": "What star is at the center of our solar system?",
+    "answer": "sun"
+  },
+  {
+    "question": "What do plants need for photosynthesis?",
+    "answer": "sunlight"
+  },
+  {
+    "question": "What is H2O commonly known as?",
+    "answer": "water"
+  },
+  {
+    "question": "What sense is used to smell?",
+    "answer": "smell"
+  },
+  {
+    "question": "What sense uses the eyes?",
+    "answer": "sight"
+  },
+  {
+    "question": "What organ pumps blood?",
+    "answer": "heart"
+  },
+  {
+    "question": "What is 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "What is 17 + 17?",
+    "answer": "34"
+  },
+  {
+    "question": "What is 38 + 38?",
+    "answer": "76"
+  },
+  {
+    "question": "What is 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "What is 48 + 48?",
+    "answer": "96"
+  },
+  {
+    "question": "What is 29 + 29?",
+    "answer": "58"
+  },
+  {
+    "question": "What is 14 + 14?",
+    "answer": "28"
+  },
+  {
+    "question": "What is 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "What is 34 + 34?",
+    "answer": "68"
+  },
+  {
+    "question": "What is 21 + 21?",
+    "answer": "42"
+  },
+  {
+    "question": "What is 7 + 7?",
+    "answer": "14"
+  },
+  {
+    "question": "What is 39 + 39?",
+    "answer": "78"
+  },
+  {
+    "question": "What is 12 + 12?",
+    "answer": "24"
+  },
+  {
+    "question": "What is 29 + 29?",
+    "answer": "58"
+  },
+  {
+    "question": "What is 13 + 13?",
+    "answer": "26"
+  },
+  {
+    "question": "What is 15 + 15?",
+    "answer": "30"
+  },
+  {
+    "question": "What is 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "What is 20 + 20?",
+    "answer": "40"
+  },
+  {
+    "question": "What is 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "What is 5 + 5?",
+    "answer": "10"
+  },
+  {
+    "question": "What is 13 + 13?",
+    "answer": "26"
+  },
+  {
+    "question": "What is 21 + 21?",
+    "answer": "42"
+  },
+  {
+    "question": "What is 44 + 44?",
+    "answer": "88"
+  },
+  {
+    "question": "What is 7 + 7?",
+    "answer": "14"
+  },
+  {
+    "question": "What is 25 + 25?",
+    "answer": "50"
+  },
+  {
+    "question": "What is 34 + 34?",
+    "answer": "68"
+  },
+  {
+    "question": "What is 35 + 35?",
+    "answer": "70"
+  },
+  {
+    "question": "What is 29 + 29?",
+    "answer": "58"
+  },
+  {
+    "question": "What is 50 + 50?",
+    "answer": "100"
+  },
+  {
+    "question": "What is 15 + 15?",
+    "answer": "30"
+  },
+  {
+    "question": "What is 11 + 11?",
+    "answer": "22"
+  },
+  {
+    "question": "What is 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "What is 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "What is 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "What is 43 + 43?",
+    "answer": "86"
+  },
+  {
+    "question": "What is 13 + 13?",
+    "answer": "26"
+  },
+  {
+    "question": "What is 42 + 42?",
+    "answer": "84"
+  },
+  {
+    "question": "What is 27 + 27?",
+    "answer": "54"
+  },
+  {
+    "question": "What is 25 + 25?",
+    "answer": "50"
+  },
+  {
+    "question": "What is 40 + 40?",
+    "answer": "80"
+  },
+  {
+    "question": "What is 16 + 16?",
+    "answer": "32"
+  },
+  {
+    "question": "What is 44 + 44?",
+    "answer": "88"
+  },
+  {
+    "question": "What is 17 + 17?",
+    "answer": "34"
+  },
+  {
+    "question": "What is 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "What is 32 + 32?",
+    "answer": "64"
+  },
+  {
+    "question": "What is 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "What is 24 + 24?",
+    "answer": "48"
+  },
+  {
+    "question": "What is 7 + 7?",
+    "answer": "14"
+  },
+  {
+    "question": "What is 31 + 31?",
+    "answer": "62"
+  },
+  {
+    "question": "What is 10 + 10?",
+    "answer": "20"
+  },
+  {
+    "question": "What is 49 + 49?",
+    "answer": "98"
+  },
+  {
+    "question": "What is 28 + 28?",
+    "answer": "56"
+  },
+  {
+    "question": "What is 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "What is 36 + 36?",
+    "answer": "72"
+  },
+  {
+    "question": "What is 39 + 39?",
+    "answer": "78"
+  },
+  {
+    "question": "What is 21 + 21?",
+    "answer": "42"
+  },
+  {
+    "question": "What is 48 + 48?",
+    "answer": "96"
+  },
+  {
+    "question": "What is 28 + 28?",
+    "answer": "56"
+  },
+  {
+    "question": "What is 48 + 48?",
+    "answer": "96"
+  },
+  {
+    "question": "What is 33 + 33?",
+    "answer": "66"
+  },
+  {
+    "question": "What is 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "What is 18 + 18?",
+    "answer": "36"
+  },
+  {
+    "question": "What is 26 + 26?",
+    "answer": "52"
+  },
+  {
+    "question": "What is 30 + 30?",
+    "answer": "60"
+  },
+  {
+    "question": "What is 8 + 8?",
+    "answer": "16"
+  },
+  {
+    "question": "What is 34 + 34?",
+    "answer": "68"
+  },
+  {
+    "question": "What is 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "What is 27 + 27?",
+    "answer": "54"
+  },
+  {
+    "question": "What is 3 + 3?",
+    "answer": "6"
+  },
+  {
+    "question": "What is 45 + 45?",
+    "answer": "90"
+  },
+  {
+    "question": "What is 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "What is 4 + 4?",
+    "answer": "8"
+  },
+  {
+    "question": "What is 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "What is 8 + 8?",
+    "answer": "16"
+  },
+  {
+    "question": "What is 28 + 28?",
+    "answer": "56"
+  },
+  {
+    "question": "What is 40 + 40?",
+    "answer": "80"
+  },
+  {
+    "question": "What is 25 + 25?",
+    "answer": "50"
+  },
+  {
+    "question": "What is 36 + 36?",
+    "answer": "72"
+  },
+  {
+    "question": "What is 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "What is 39 + 39?",
+    "answer": "78"
+  },
+  {
+    "question": "What is 45 + 45?",
+    "answer": "90"
+  },
+  {
+    "question": "What is 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "What is 4 + 4?",
+    "answer": "8"
+  },
+  {
+    "question": "What is 17 + 17?",
+    "answer": "34"
+  },
+  {
+    "question": "What is 46 + 46?",
+    "answer": "92"
+  },
+  {
+    "question": "What is 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "What is 15 + 15?",
+    "answer": "30"
+  },
+  {
+    "question": "What is 21 + 21?",
+    "answer": "42"
+  },
+  {
+    "question": "What is 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "What is 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "What is 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "What is 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "What is 11 + 11?",
+    "answer": "22"
+  },
+  {
+    "question": "What is 30 + 30?",
+    "answer": "60"
+  },
+  {
+    "question": "What is 17 + 17?",
+    "answer": "34"
+  },
+  {
+    "question": "What is 42 + 42?",
+    "answer": "84"
+  },
+  {
+    "question": "What is 12 + 12?",
+    "answer": "24"
+  },
+  {
+    "question": "What is 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "What is 14 + 14?",
+    "answer": "28"
+  },
+  {
+    "question": "What is 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "What is 7 + 7?",
+    "answer": "14"
+  },
+  {
+    "question": "What is 5 + 5?",
+    "answer": "10"
+  },
+  {
+    "question": "What is 8 + 8?",
+    "answer": "16"
+  },
+  {
+    "question": "What is 48 + 48?",
+    "answer": "96"
+  },
+  {
+    "question": "What is 27 + 27?",
+    "answer": "54"
+  },
+  {
+    "question": "What is 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "What is 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "What is 1 + 1?",
+    "answer": "2"
+  }
+]
