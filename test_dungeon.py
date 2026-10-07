@@ -2,8 +2,10 @@
 
 import random
 import unittest
+from collections import deque
 
 from dungeon import Dungeon, MODES
+from dungeon_map import CARDINAL_DIRECTIONS, distances
 
 
 class DungeonTests(unittest.TestCase):
@@ -14,20 +16,115 @@ class DungeonTests(unittest.TestCase):
     def solve(self, game):
         return game.submit(game.question["answer"])
 
-    def test_three_exits_rejoin_and_every_route_reaches_boss(self):
+    def path_to(self, game, target):
+        queue = deque([(game.current.key, [])])
+        visited = {game.current.key}
+        while queue:
+            key, path = queue.popleft()
+            if key == target:
+                return path
+            for neighbor in sorted(game.connections[key]):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append((neighbor, path + [neighbor]))
+        self.fail("Target room is unreachable")
+
+    def walk(self, game, path):
+        for key in path:
+            index = [room.key for room in game.exits()].index(key)
+            self.assertTrue(game.enter(index))
+            if game.question is not None:
+                self.solve(game)
+
+    def test_spatial_graph_invariants_across_seeds_and_modes(self):
         for mode in MODES:
-            g = self.make_game(mode)
-            frontier = {g.current.key}
-            for depth in range(g.floors):
-                next_frontier = set()
-                for key in frontier:
-                    g.current = g.rooms[key]
-                    exits = g.exits()
-                    self.assertEqual(len(exits), 3)
-                    self.assertTrue(all(r.depth == depth + 1 for r in exits))
-                    next_frontier.update(r.key for r in exits)
-                frontier = next_frontier
-            self.assertEqual(frontier, {(g.floors, 1)})
+            for seed in range(100):
+                with self.subTest(mode=mode, seed=seed):
+                    g = Dungeon(mode, rng=random.Random(seed))
+                    self.assertEqual(g.current.key, (0, 0))
+                    self.assertEqual(len(g.rooms), g.room_count)
+                    self.assertGreaterEqual(len(g.exits()), 2)
+                    measured = distances(g.connections)
+                    self.assertEqual(set(measured), set(g.rooms))
+                    self.assertEqual({key: room.depth for key, room in g.rooms.items()}, measured)
+                    self.assertEqual(g.floors, measured[g.boss_key])
+                    self.assertGreaterEqual(g.floors, 4)
+                    self.assertEqual(len(g.connections[g.boss_key]), 1)
+                    self.assertEqual(sum(r.kind == "boss" for r in g.rooms.values()), 1)
+                    self.assertTrue(any(len(edges) >= 3 for edges in g.connections.values()))
+                    self.assertTrue(any(len(edges) == 1 and key != g.boss_key
+                                        for key, edges in g.connections.items()))
+                    # A connected graph with at least V edges contains a cycle.
+                    self.assertGreaterEqual(sum(map(len, g.connections.values())) // 2, len(g.rooms))
+                    for key, edges in g.connections.items():
+                        self.assertNotIn(key, edges)
+                        self.assertLessEqual(len(edges), 4)
+                        for adjacent in edges:
+                            self.assertIn(key, g.connections[adjacent])
+                            self.assertEqual(sum(abs(a - b) for a, b in zip(key, adjacent)), 1)
+                    without_boss = {key: edges - {g.boss_key} for key, edges in g.connections.items()
+                                    if key != g.boss_key}
+                    self.assertEqual(len(distances(without_boss)), len(g.rooms) - 1)
+
+    def test_seed_reproduces_layout_types_and_questions(self):
+        first = self.make_game()
+        second = self.make_game()
+        self.assertEqual(first.connections, second.connections)
+        self.assertEqual(first.rooms, second.rooms)
+        first.enter(0)
+        second.enter(0)
+        self.assertEqual(first.question, second.question)
+        other = Dungeon(rng=random.Random(43))
+        self.assertNotEqual(first.connections, other.connections)
+
+    def test_compass_order_and_invalid_doors(self):
+        g = self.make_game()
+        for room in g.rooms.values():
+            g.current = room
+            expected = [(room.x + dx, room.y + dy) for dx, dy in CARDINAL_DIRECTIONS
+                        if (room.x + dx, room.y + dy) in g.connections[room.key]]
+            self.assertEqual([r.key for r in g.exits()], expected)
+        g.current = g.rooms[0, 0]
+        for invalid in (-1, len(g.exits()), 100, None, "0"):
+            self.assertFalse(g.enter(invalid))
+            self.assertEqual(g.current.key, (0, 0))
+
+    def test_fog_reveals_only_room_neighbors_and_back_tracks_history(self):
+        g = self.make_game()
+        self.assertEqual(g.revealed, {(0, 0)} | g.connections[0, 0])
+        self.assertEqual(g.visited, {(0, 0)})
+        previous_reveal = g.revealed.copy()
+        g.enter(0)
+        first = g.current.key
+        self.assertEqual(g.visited, {(0, 0), first})
+        self.assertEqual(g.revealed, previous_reveal | g.connections[first])
+        self.solve(g)
+        origin_door = [r.key for r in g.exits()].index((0, 0))
+        self.assertTrue(g.enter(origin_door))
+        self.assertIsNone(g.question)
+        self.assertTrue(g.back())
+        self.assertEqual(g.current.key, first)
+        self.assertTrue(g.back())
+        self.assertEqual(g.current.key, (0, 0))
+        self.assertFalse(g.back())
+
+    def test_all_optional_rooms_can_be_explored_before_boss(self):
+        g = self.make_game()
+
+        def visit():
+            origin = g.current.key
+            for key in sorted(g.connections[origin]):
+                if key == g.boss_key or key in g.visited:
+                    continue
+                self.walk(g, [key])
+                visit()
+                self.assertTrue(g.back())
+                self.assertEqual(g.current.key, origin)
+
+        visit()
+        self.assertEqual(g.visited, set(g.rooms) - {g.boss_key})
+        self.assertEqual(g.status, "playing")
+        self.assertEqual(g.current.key, (0, 0))
 
     def test_locked_room_cannot_be_skipped(self):
         g = self.make_game()
@@ -113,8 +210,9 @@ class DungeonTests(unittest.TestCase):
 
     def test_campaign_difficulty_and_time_progress(self):
         g = self.make_game(4)
-        for depth, seconds, tier in ((1, 30, "Easy"), (6, 22, "Medium"), (12, 15, "Hard")):
-            g.current = g.rooms[depth, 0]
+        for depth, seconds, tier in ((1, 30, "Easy"), ((g.floors + 2) // 3, 22, "Medium"),
+                                    ((2 * g.floors + 2) // 3, 15, "Hard")):
+            g.current = next(room for room in g.rooms.values() if room.depth == depth)
             g.current.kind = "combat"
             g.question = None
             g.ask()
@@ -123,9 +221,7 @@ class DungeonTests(unittest.TestCase):
 
     def test_guardian_needs_three_hits_and_freezes_final_time(self):
         g = self.make_game()
-        while g.current.depth < g.floors:
-            self.assertTrue(g.enter(1))
-            self.solve(g)
+        self.walk(g, self.path_to(g, g.boss_key))
         self.assertEqual(g.current.hits, 1)
         self.assertEqual(g.status, "playing")
         for _ in range(2):

@@ -1,10 +1,11 @@
-"""Dungeon rules, independent of Tk: branching routes, timed trivia and rewards."""
+"""Dungeon rules, independent of Tk: spatial exploration, trivia and rewards."""
 
 from dataclasses import dataclass
 import random
 import time
 
 from core import DifficultyHandler
+from dungeon_map import CARDINAL_DIRECTIONS, generate_layout
 
 
 MODES = {
@@ -14,31 +15,32 @@ MODES = {
     4: ("Campanha", 18, 300, 30),
 }
 ROOMS = {
-    "combat": ("Sentinela", "Desafio comum", "#66cde5", 1.0),
-    "treasure": ("Tesouro", "Pontos ×1,5", "#f3c66b", 1.5),
-    "elite": ("Elite", "Pontos ×2 · tempo −25%", "#f57888", 2.0),
-    "sanctuary": ("Santuário", "+1 vida ao acertar", "#86e4b4", 1.0),
-    "clock": ("Ampulheta", "+12s ao acertar", "#b49aff", 1.0),
-    "boss": ("Guardião", "3 acertos para vencer", "#f57888", 3.0),
+    "combat": ("Terminal", "Desafio de quiz", "#24e5dd", 1.0),
+    "treasure": ("Cache", "Pontos ×1,5", "#f3c66b", 1.5),
+    "elite": ("Sobrecarga", "Pontos ×2 · tempo −25%", "#f57888", 2.0),
+    "sanctuary": ("Recuperação", "+1 vida ao acertar", "#86e4b4", 1.0),
+    "clock": ("Sincronizador", "+12s ao acertar", "#b49aff", 1.0),
+    "boss": ("Núcleo", "3 acertos para vencer", "#f57888", 3.0),
     "entrance": ("Entrada", "Escolha sua primeira porta", "#66cde5", 1.0),
 }
 
 
 @dataclass
 class Room:
-    depth: int
-    lane: int
+    x: int
+    y: int
     kind: str
+    depth: int
     cleared: bool = False
     hits: int = 0
 
     @property
     def key(self):
-        return self.depth, self.lane
+        return self.x, self.y
 
 
 class Dungeon:
-    """Three routes per floor reconverge; the map is a route graph, not a compass.
+    """Connected rooms occupy a grid with actual north/east/south/west doors.
 
     The entire expedition shares a clock and lives. In local cooperative play,
     each submitted answer rotates the active player and scores individually.
@@ -48,19 +50,24 @@ class Dungeon:
         if difficulty not in MODES or not 1 <= players <= 4:
             raise ValueError("Invalid difficulty or player count")
         self.difficulty = difficulty
-        self.name, self.floors, budget, self.base_question_time = MODES[difficulty]
+        self.name, size, budget, self.base_question_time = MODES[difficulty]
         self.rng = rng or random.Random()
         self.clock = clock
         self.deadline = clock() + budget
         self.budget = budget
         self.bank = DifficultyHandler(difficulty)
-        self.rooms = {(0, 1): Room(0, 1, "entrance", cleared=True)}
-        for depth in range(1, self.floors):
-            kinds = self.rng.sample(list(ROOMS)[:5], 3)
-            for lane, kind in enumerate(kinds):
-                self.rooms[depth, lane] = Room(depth, lane, kind)
-        self.rooms[self.floors, 1] = Room(self.floors, 1, "boss")
-        self.current = self.rooms[0, 1]
+        self.room_count = 3 * (size - 1) + 2
+        self.connections, depths, self.boss_key = generate_layout(self.rng, self.room_count)
+        self.floors = depths[self.boss_key]
+        self.rooms = {}
+        for x, y in self.connections:
+            kind = self.rng.choice(list(ROOMS)[:5])
+            if (x, y) == (0, 0):
+                kind = "entrance"
+            elif (x, y) == self.boss_key:
+                kind = "boss"
+            self.rooms[x, y] = Room(x, y, kind, depths[x, y], cleared=kind == "entrance")
+        self.current = self.rooms[0, 0]
         self.history = []
         self.visited = {self.current.key}
         self.revealed = {self.current.key}
@@ -91,21 +98,19 @@ class Dungeon:
         return max(0, min(self.remaining, self.question_deadline - self.clock()))
 
     def exits(self):
-        depth, lane = self.current.key
-        if depth == self.floors:
-            return []
-        if depth == self.floors - 1:
-            return [self.rooms[self.floors, 1]] * 3
-        return [self.rooms[depth + 1, (lane + offset) % 3] for offset in (-1, 0, 1)]
+        """Existing doors in compass order, including already visited rooms."""
+        x, y = self.current.key
+        return [self.rooms[x + dx, y + dy] for dx, dy in CARDINAL_DIRECTIONS
+                if (x + dx, y + dy) in self.connections[self.current.key]]
 
     def reveal(self):
         self.revealed.update(room.key for room in self.exits())
 
     def enter(self, door):
-        if self.status != "playing" or self.remaining <= 0 or not self.current.cleared or door not in (0, 1, 2):
+        if self.status != "playing" or self.remaining <= 0 or not self.current.cleared:
             return False
         exits = self.exits()
-        if not exits:
+        if not isinstance(door, int) or not 0 <= door < len(exits):
             return False
         self.history.append(self.current.key)
         self.current = exits[door]
@@ -127,7 +132,7 @@ class Dungeon:
         # Match the campaign bank's exact boundaries (0 / 41 / 83).
         tier = min(2, self.current.depth * 3 // self.floors)
         progress = (0, 41, 83)[tier]
-        self.question = self.bank.pick_question(progress)
+        self.question = self.rng.choice(self.bank.bank_for(progress).questions)
         duration = self.base_question_time
         if self.difficulty == 4:
             duration = (30, 22, 15)[tier]
