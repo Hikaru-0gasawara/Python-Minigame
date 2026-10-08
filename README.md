@@ -5,34 +5,48 @@
 Execute `python gui.py` ou `python __main__.py --gui` (Python 3.10+ com Tkinter).
 No Windows, dê dois cliques em `jogar.cmd`; ele usa o Python integrado ao Codex
 quando disponível, ou o comando `python` do sistema.
-Uma expedição de trivia em salas em perspectiva, com três portas à frente e
-uma entrada às suas costas. Clique nas portas ou nos botões para escolher a rota;
-digite a resposta e pressione Enter. O banco de perguntas atual está em inglês.
+Uma expedição de quiz em um complexo de salas em perspectiva. A câmera tem
+orientação fixa para o norte: oeste à esquerda, leste à direita e sul atrás.
+Use as portas, os botões, **Alt + setas** ou clique em uma sala vizinha no minimapa.
+Digite a resposta e pressione Enter. O banco de perguntas atual está em inglês.
 
-- **Rotas com ramificações e reencontros:** três opções por nível, com minimapa
-  das salas reveladas. O mapa representa conexões por profundidade, não uma
-  planta geográfica. As três rotas finais chegam ao mesmo guardião.
+- **Masmorra geográfica procedural:** 26 / 35 / 44 / 53 salas por modo, distribuídas
+  em coordenadas reais. Cada partida tem bifurcações, ciclos, atalhos e becos.
+  Há de uma a quatro passagens por sala; paredes nunca funcionam como portas.
+- **Exploração:** o minimapa revela a sala atual e suas vizinhas, desenhando apenas
+  passagens descobertas. Salas concluídas ficam preenchidas. O núcleo final é
+  uma sala terminal; os demais ramos podem ser explorados antes de entrar nele.
+- **Quiz e feedback:** corredores tecnológicos, terminais e acentos em ciano;
+  pergunta em destaque, pontos flutuantes, partículas e combo. Desative os efeitos
+  para movimento reduzido.
 - **Relógio contínuo:** explorar e escolher também consome tempo. Explorador:
   240s / 30s por pergunta; Aventureiro: 190s / 22s; Pesadelo: 145s / 15s.
-  A Campanha tem 300s e perguntas progressivas de 30s, 22s e 15s.
-- **Risco e recompensa:** tesouros dão ×1,5 pontos; elites dão ×2 com 25% menos
-  tempo por pergunta; santuários restauram uma vida; ampulhetas acrescentam 12s.
+  A Campanha tem 300s e perguntas progressivas de 30s, 22s e 15s, conforme a
+  distância por portas desde a entrada.
+- **Risco e recompensa:** caches dão ×1,5 pontos; sobrecargas dão ×2 com 25%
+  menos tempo; recuperação restaura uma vida; sincronizadores acrescentam 12s.
 - **5 vidas:** erro ou tempo esgotado da pergunta custa uma vida e quebra o combo.
-  O relógio geral zerado encerra a partida. Cada sala exige um acerto; o guardião,
+  O relógio geral zerado encerra a partida. Cada sala exige um acerto; o núcleo,
   três. Após um erro, a resposta aparece por 3s antes de uma nova pergunta.
 - **Pontuação:** base de 1.000 + até 1.000 por velocidade, multiplicada pelo combo
-  (até ×3,25) e pela sala. Números flutuantes, partículas, tochas e contador animado
-  acompanham os acertos. A opção de movimento reduzido desliga as animações.
+  (até ×3,25) e pela sala.
 - **Solo ou cooperação local para até 4:** tempo, vidas e combo compartilhados;
   os jogadores se alternam a cada resposta, com pontuações individuais.
-- **Voltar e explorar:** a porta às costas volta à sala anterior quando o desafio
-  está resolvido. Revisitar uma sala concluída não concede recompensas novamente.
+- **Voltar e explorar:** qualquer passagem pode ser percorrida nos dois sentidos
+  após resolver o desafio. “Voltar pelo trajeto” desfaz o último deslocamento;
+  esse comando é diferente da direção sul. Revisitar não repete recompensas.
 
 O tabuleiro gráfico anterior continua disponível em `python gui.py --board`;
 `python __main__.py` mantém o modo clássico de terminal descrito abaixo.
-As regras da masmorra ficam em `dungeon.py`, a interface em `dungeon_ui.py`.
-Valide as regras com `python -m unittest -v test_dungeon`; inclua
-`test_dungeon_ui` para testar também a interface (requer um display Tk).
+
+A geração espacial fica em `dungeon_map.py`, as regras em `dungeon.py` e a interface
+em `dungeon_ui.py`. Rode `python -m unittest -v test_dungeon test_dungeon_ui` para
+validar regras e integração (os testes de interface precisam de um display Tk).
+O gerador recebe um `random.Random(seed)` para testes reproduzíveis.
+
+Esta é a primeira rodada da evolução do crawler. A análise individual das sete
+imagens e as próximas etapas estão em [DESIGN.md](DESIGN.md). O balanceamento dos
+relógios frente às diferentes distâncias dos mapas ainda precisa de playtests.
 
 ## Modo clássico
 

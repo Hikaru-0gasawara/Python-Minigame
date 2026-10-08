@@ -183,7 +183,7 @@ class Expedition(tk.Frame):
         self.map.pack(fill="x")
         self.map.bind("<Button-1>", self.map_click)
         self.map_positions = {}
-        label(side, "Ciano: você · cheia: concluída · X: núcleo\nClique numa sala vizinha para entrar.",
+        label(side, "Ciano: você · cheia: concluída · X: núcleo\nClique numa vizinha · Alt + setas",
               9, MUTED, justify="left").pack(anchor="w", pady=6)
         self.roster = label(side, "", 10, justify="left", anchor="w")
         self.roster.pack(fill="x", pady=(4, 6))
