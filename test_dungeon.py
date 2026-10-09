@@ -210,14 +210,14 @@ class DungeonTests(unittest.TestCase):
 
     def test_campaign_difficulty_and_time_progress(self):
         g = self.make_game(4)
-        for depth, seconds, tier in ((1, 30, "Easy"), ((g.floors + 2) // 3, 22, "Medium"),
-                                    ((2 * g.floors + 2) // 3, 15, "Hard")):
+        for depth, seconds, tier in ((1, 30, "easy"), ((g.floors + 2) // 3, 22, "medium"),
+                                    ((2 * g.floors + 2) // 3, 15, "hard")):
             g.current = next(room for room in g.rooms.values() if room.depth == depth)
             g.current.kind = "combat"
             g.question = None
             g.ask()
             self.assertEqual(g.question_duration, seconds)
-            self.assertIn(g.question, getattr(g.bank, tier.lower() + "_bank").questions)
+            self.assertIn(g.question, g.bank.tiers[tier])
 
     def test_guardian_needs_three_hits_and_freezes_final_time(self):
         g = self.make_game()

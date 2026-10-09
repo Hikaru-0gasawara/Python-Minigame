@@ -75,9 +75,9 @@ class RoomScene:
                     continue
                 gap = .005
                 slab = _quad(quad, u0+gap, v0+gap, u1-gap, v1-gap)
-                shade = rng.uniform(.84, 1.16)
+                shade = rng.uniform(.91, 1.09)
                 self._material.append(("p", slab, _color(base, shade), 1))
-                self._material.append(("l", slab[:2], _color(base, shade*1.25), 1))
+                self._material.append(("l", slab[:2], _color(base, shade*1.17), 1))
                 if rng.random() < .30:
                     # Irregular chipped patch, never a flashing per-frame noise.
                     u = rng.uniform(u0+.01, max(u0+.011, u1-.03))
@@ -111,7 +111,52 @@ class RoomScene:
     def _mapped_line(self, quad, points, color, width=1):
         self._line([_point(quad, u, v) for u, v in points], color, width)
 
-    def _door(self, index, portal, locked, progress, pulse):
+    def _door_leaf(self, inner, offset, right=False):
+        """Translate a rigid half-door, clipping its details at the jamb.
+
+        Everything uses the original leaf's coordinates, so handles and panels
+        disappear behind the frame instead of being squeezed as the door opens.
+        """
+        def plate(u0, v0, u1, v1, fill):
+            x0, x1 = max(0., offset+u0*.5), min(1., offset+u1*.5)
+            if x1 > x0:
+                self._poly(_quad(inner, x0, v0, x1, v1), fill)
+
+        def line(points, color, width=1):
+            for (u0, v0), (u1, v1) in zip(points, points[1:]):
+                x0, x1 = offset+u0*.5, offset+u1*.5
+                delta = x1-x0
+                if abs(delta) < 1e-8:
+                    if 0 <= x0 <= 1:
+                        self._mapped_line(inner, [(x0, v0), (x1, v1)], color, width)
+                    continue
+                a, b = sorted(((0-x0)/delta, (1-x0)/delta))
+                a, b = max(0., a), min(1., b)
+                if b > a:
+                    self._mapped_line(inner, [(x0+delta*a, v0+(v1-v0)*a),
+                                               (x0+delta*b, v0+(v1-v0)*b)], color, width)
+
+        plate(0, 0, 1, 1, "#34464b")
+        plate(.045, .02, .955, .98, "#3c5156")
+        plate(.12, .09, .88, .445, "#1e3037")
+        plate(.15, .11, .85, .435, "#2a3e46")
+        plate(.12, .60, .88, .90, "#23343b")
+        line([(.12, .445), (.88, .445)], "#68817e")
+        line([(.12, .90), (.88, .90)], "#607674")
+        line([(.055, .03), (.055, .97)], "#617a7b")
+        line([(.945, .03), (.945, .97)], "#1a2c32", 2)
+        for v in (.65, .68, .71):
+            line([(.22, v), (.76, v)], "#14272e", 2)
+        line([(.20, .82), (.73, .79)], "#182b32")
+        line([(.27, .85), (.65, .83)], "#4b6469")
+        # The warm metal grip stays the same size throughout the translation.
+        grip = .19 if right else .69
+        plate(grip-.04, .465, grip+.13, .58, "#172a31")
+        plate(grip, .48, grip+.065, .565, "#adb6aa")
+        plate(grip, .48, grip+.065, .49, "#e0dac6")
+        plate(.82 if right else .08, .49, .90 if right else .16, .535, "#597778")
+
+    def _door(self, index, portal, locked, progress, pulse, hovered=False):
         # Side door edges follow the same depth directions as their walls.
         quads = [((.04, .19), (.255, .305), (.255, .745), (.04, .87)),
                  ((.39, .27), (.61, .27), (.61, .70), (.39, .70)),
@@ -120,7 +165,7 @@ class RoomScene:
         accent = "#e27461" if locked else portal.get("color", "#62d8ca")
         # Outside shadow, outer cast frame, inner bevel and thick recessed jamb.
         self._poly(_quad(q, -.03, -.018, 1.04, 1.04), "#101a1c")
-        self._poly(q, "#59605d", "#89928b")
+        self._poly(q, "#4e615f", "#80928b")
         self._poly(_quad(q, .04, .035, .96, .985), "#262e30", "#343e40")
         self._poly(_quad(q, .075, .07, .925, .96), "#070e12")
         self._poly([_point(q, .04, .035), _point(q, .075, .07),
@@ -138,20 +183,9 @@ class RoomScene:
         self._mapped_line(inner, [(0, 1), (.33, .73), (.67, .73), (1, 1)], "#3d7978")
         self._poly(_quad(inner, .42, .26, .58, .285), "#8fc5bb")
         p = max(0., min(1., progress))
-        for u0, u1 in ((0, .5*(1-p)), (.5*(1+p), 1)):
-            if u1-u0 < .006:
-                continue
-            leaf = _quad(inner, u0, 0, u1, 1)
-            self._poly(leaf, "#34494c", "#728381")
-            # Deeply inset metal plates and long vertical ribs.
-            self._poly(_quad(leaf, .12, .10, .88, .46), "#29393d", "#536b6b")
-            self._poly(_quad(leaf, .12, .52, .88, .90), "#28373a", "#4c6161")
-            self._mapped_line(leaf, [(.18, .15), (.18, .40)], "#384d50", 2)
-            self._mapped_line(leaf, [(.20, .78), (.73, .74)], "#1e2d31")
-            self._mapped_line(leaf, [(.27, .82), (.72, .80)], "#526363")
-            if u1-u0 > .15:
-                self._poly(_quad(leaf, .67 if u0 == 0 else .18, .46,
-                                 .79 if u0 == 0 else .30, .58), "#abb3a6", "#18282d")
+        if p < 1.:
+            self._door_leaf(inner, -.5*p)
+            self._door_leaf(inner, .5+.5*p, right=True)
         # Hardware stays on the frame, including rail and bolts.
         self._mapped_line(q, [(.06, .05), (.94, .05)], "#a0aaa0", 2)
         self._mapped_line(q, [(.06, .975), (.94, .975)], "#929384", 3)
@@ -160,18 +194,23 @@ class RoomScene:
                 self._poly(_quad(q, u-.007, v-.008, u+.007, v+.008), "#abb1a0")
         self._poly(_quad(q, .02, .22, .045, .62), _color(accent, pulse))
         self._poly(_quad(q, .955, .22, .98, .62), _color(accent, .76))
+        if hovered and not locked:
+            self._mapped_line(q, [(0, .15), (0, 0), (.25, 0)], accent, 2)
+            self._mapped_line(q, [(.75, 0), (1, 0), (1, .15)], accent, 2)
+            self._mapped_line(q, [(0, .85), (0, 1), (.25, 1)], accent, 2)
+            self._mapped_line(q, [(.75, 1), (1, 1), (1, .85)], accent, 2)
         if locked:
             self._poly(_quad(q, .16, .465, .84, .505), "#69423b", "#bf7a5e")
             self._poly(_quad(q, .455, .44, .545, .535), "#c56a52")
         # Small nameplate above each actual opening, never on a solid wall.
-        self._poly(_quad(q, .09, -.12, .91, -.025), "#101e24", "#536867")
+        self._poly(_quad(q, .09, -.12, .91, -.025), "#101e24", accent if hovered and not locked else "#536867")
         label = str(portal.get("label", "Passagem")).upper()
         if len(label) > 18:
             label = label[:17] + "…"
         self._text(_point(q, .5, -.073), f"{portal.get('compass', '')}  {label}", accent, 8)
 
     def draw(self, *, room_key, kind, portals, facing, locked, opening=None,
-             camera=(1., 0., 0.), now=0., effects=True):
+             camera=(1., 0., 0.), now=0., effects=True, hovered=None):
         self.canvas.delete("world")
         self.w = max(1, self.canvas.winfo_width())
         self.h = max(1, self.canvas.winfo_height())
@@ -186,10 +225,21 @@ class RoomScene:
                 self._poly(points, color)
             else:
                 self._line(points, color, width)
+        # Recessed ceiling edges and stepped cornices give surfaces thickness.
+        self._poly([(0, .07), (.30, .23), (.70, .23), (1, .07),
+                    (1, .105), (.70, .258), (.30, .258), (0, .105)], "#253437")
+        self._line([(0, .07), (.30, .23), (.70, .23), (1, .07)], "#61706b", 2)
+        self._line([(0, .105), (.30, .258), (.70, .258), (1, .105)], "#182629", 3)
         # Load-bearing columns and metal skirting anchor the room geometry.
         for x in (.30, .70):
-            self._poly([(x-.012, .195), (x+.012, .195),
-                        (x+.012, .71), (x-.012, .71)], "#263536", "#62706b")
+            self._poly([(x-.017, .195), (x+.017, .195),
+                        (x+.017, .715), (x-.017, .715)], "#1b2b2f")
+            self._poly([(x-.010, .195), (x+.010, .195),
+                        (x+.010, .705), (x-.010, .705)], "#35484b")
+            self._line([(x-.01, .20), (x-.01, .70)], "#687d77")
+            for y in (.29, .62):
+                self._poly([(x-.014, y), (x+.014, y),
+                            (x+.014, y+.021), (x-.014, y+.021)], "#506763")
         self._line([(0, .965), (.30, .695), (.70, .695), (1, .965)], "#151f22", 8)
         accent = {"elite": "#d99466", "boss": "#bf92c4", "sanctuary": "#83cba9",
                   "treasure": "#e0c27d"}.get(kind, "#6bbdbb")
@@ -210,7 +260,7 @@ class RoomScene:
         for i, portal in enumerate(portals[:3]):
             if portal is not None:
                 progress = opening[1] if opening and opening[0] == i else 0.
-                self._door(i, portal, locked, progress, pulse)
+                self._door(i, portal, locked, progress, pulse, hovered == i)
         # These small overlays remain screen-fixed while the camera moves.
         self.camera = (1., 0., 0.)
         self._poly([(0, 0), (1, 0), (1, .083), (0, .083)], "#0b171d")
@@ -219,6 +269,7 @@ class RoomScene:
                    "#d69980" if locked else "#becac8", 8, anchor="e")
         if len(portals) > 3 and portals[3] is not None:
             x0, y0, x1, y1 = DOOR_BOUNDS[3]
-            self._poly([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], "#10232a", "#587977")
+            self._poly([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], "#10232a",
+                       "#8ddbd3" if hovered == 3 and not locked else "#587977")
             self._text(((x0+x1)/2, (y0+y1)/2),
                        f"↓  {portals[3].get('compass', '')} · ATRÁS", "#b9d4ce", 9)

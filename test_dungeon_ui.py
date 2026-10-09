@@ -5,7 +5,7 @@ import random
 from types import SimpleNamespace
 
 from dungeon import Dungeon
-from dungeon_ui import DungeonApp, Expedition, PORTALS
+from dungeon_ui import DungeonApp, ExpeditionScreen, PORTALS, PLAYER_COLORS
 
 
 class DungeonUITests(unittest.TestCase):
@@ -27,7 +27,7 @@ class DungeonUITests(unittest.TestCase):
         self.app.mainloop()
 
     def start_seeded(self, players=1):
-        self.app.swap(Expedition(self.app, Dungeon(players=players, rng=random.Random(42))))
+        self.app.swap(ExpeditionScreen(self.app, Dungeon(players=players, rng=random.Random(42))))
         self.app.update()
         return self.app.screen
 
@@ -212,6 +212,50 @@ class DungeonUITests(unittest.TestCase):
         self.assertEqual(screen.game.status, "lost")
         self.assertEqual(screen.game.current.key, origin)
         self.assertIsNone(screen.transition)
+
+    def test_player_identity_tracks_full_rotation_and_result_author(self):
+        screen = self.start_seeded(players=4)
+        screen.enter(0)
+        for player in range(4):
+            g = screen.game
+            self.assertEqual(g.player, player)
+            card_names = [str(name.cget("text")) for _, name, _ in screen.player_cards]
+            self.assertEqual(sum("SUA VEZ" in name for name in card_names), 1)
+            self.assertIn("SUA VEZ", card_names[player])
+            self.assertEqual(screen.challenge.cget("highlightbackground"), PLAYER_COLORS[player])
+            self.assertEqual(screen.submit_btn.cget("bg"), PLAYER_COLORS[player])
+            self.assertIn(f"JOGADOR {player+1}", screen.player_badge.itemcget("active_player", "text"))
+            screen.answer.insert(0, "definitely not a valid answer")
+            screen.submit()
+            self.assertTrue(screen.feedback.cget("text").startswith(f"J{player+1} ·"))
+            self.assertEqual(g.player, (player+1) % 4)
+            g.ask()
+            screen.refresh()
+        self.assertEqual(screen.game.player, 0)
+
+    def test_correct_answer_awards_previous_player_and_highlights_next(self):
+        screen = self.start_seeded(players=2)
+        screen.enter(0)
+        self.solve(screen)
+        self.assertGreater(screen.game.scores[0], 0)
+        self.assertEqual(screen.game.scores[1], 0)
+        self.assertIn("J1", screen.feedback.cget("text"))
+        self.assertIn("JOGADOR 2", screen.player_badge.itemcget("active_player", "text"))
+        self.assertIn("SUA VEZ", screen.player_cards[1][1].cget("text"))
+        self.assertEqual(screen.answer.get(), "")
+
+    def test_timeout_rotates_identity_and_finished_run_has_no_active_player(self):
+        screen = self.start_seeded(players=2)
+        screen.enter(0)
+        screen.game.question_deadline = screen.game.clock() - 1
+        self.pump()
+        self.assertEqual(screen.game.player, 1)
+        self.assertIn("SUA VEZ", screen.player_cards[1][1].cget("text"))
+        screen.game.deadline = screen.game.clock() - 1
+        self.pump()
+        self.assertIsNone(screen._active_player)
+        self.assertFalse(any("SUA VEZ" in name.cget("text") for _, name, _ in screen.player_cards))
+        self.assertEqual(screen.player_badge.itemcget("active_player", "text"), "PLACAR DA EQUIPE")
 
 
 if __name__ == "__main__":

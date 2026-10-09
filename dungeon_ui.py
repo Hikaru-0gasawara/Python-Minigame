@@ -8,6 +8,7 @@ import tkinter as tk
 from dungeon import Dungeon, ROOMS
 from menu_ui import Setup
 from room_scene import RoomScene, DOOR_BOUNDS
+from motion import CanvasVeil, smooth, blend
 
 BG = "#080e12"
 PANEL = "#111e25"
@@ -17,8 +18,9 @@ GOLD = "#f3c66b"
 TEAL = "#24e5dd"
 RED = "#f57888"
 FONT = "Segoe UI"
+PLAYER_COLORS = ("#48e5dd", "#f6c777", "#c4a0ff", "#90dfab")
 
-# The perspective always looks north. South is the passage behind the player.
+# Initial portal layout; relative_portals follows the player's current facing.
 PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
            ("L", "LESTE", (1, 0)), ("S", "SUL", (0, 1)))
 COMPASS = (("N", "NORTE", (0, -1)), ("L", "LESTE", (1, 0)),
@@ -61,11 +63,11 @@ class DungeonApp(tk.Tk):
         self.swap(Setup(self))
 
     def start(self, difficulty, players):
-        self.swap(Expedition(self, Dungeon(difficulty, players)))
+        self.swap(ExpeditionScreen(self, Dungeon(difficulty, players)))
 
 
 
-class Expedition(tk.Frame):
+class ExpeditionScreen(tk.Frame):
     def __init__(self, app, game):
         super().__init__(app, bg=BG)
         self.app, self.game = app, game
@@ -80,12 +82,18 @@ class Expedition(tk.Frame):
         self.facing = 0
         self.transition = None
         self._shown_question = None
+        self.arrival_at = None
+        self._player_state = None
+        self._active_player = None
+        self.turn_changed_at = 0
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
         header = tk.Frame(self, bg=BG)
         header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=22, pady=(16, 12))
-        label(header, "ECOS / QUIZ CRAWLER", 19, TEAL).pack(side="left")
+        label(header, "ECOS / EXPEDIÇÃO", 17, TEAL).pack(side="left")
+        self.player_badge = tk.Canvas(header, width=232, height=46, bg=BG, highlightthickness=0)
+        self.player_badge.pack(side="left", padx=(24, 8))
         self.stats = label(header, "", 13)
         self.stats.pack(side="right")
 
@@ -110,6 +118,7 @@ class Expedition(tk.Frame):
         self.scene.bind("<Leave>", lambda e: setattr(self, "hover", None))
         self.scene.bind("<Button-1>", self.scene_click)
         self.renderer = RoomScene(self.scene)
+        self.veil = CanvasVeil(self.scene)
 
         doors = tk.Frame(main, bg=BG)
         doors.grid(row=2, column=0, sticky="ew", pady=8)
@@ -121,7 +130,8 @@ class Expedition(tk.Frame):
             btn.grid(row=0, column=i, sticky="ew", padx=3)
             self.door_buttons.append(btn)
 
-        challenge = tk.Frame(main, bg=PANEL, padx=16, pady=12)
+        challenge = self.challenge = tk.Frame(main, bg=PANEL, padx=16, pady=12,
+                                              highlightthickness=1, highlightbackground=TEAL)
         challenge.grid(row=3, column=0, sticky="ew")
         self.q_meta = label(challenge, "", 10, TEAL, anchor="w")
         self.q_meta.pack(fill="x")
@@ -131,7 +141,8 @@ class Expedition(tk.Frame):
         answer_row = tk.Frame(challenge, bg=PANEL)
         answer_row.pack(fill="x")
         self.answer = tk.Entry(answer_row, bg="#0b1321", fg=TEXT, insertbackground=TEXT,
-                               relief="flat", font=(FONT, 13), disabledbackground="#182237")
+                               relief="flat", font=(FONT, 13), disabledbackground="#182237",
+                               highlightthickness=1, highlightbackground="#294048", highlightcolor=TEAL)
         self.answer.pack(side="left", fill="x", expand=True, ipady=10, padx=(0, 8))
         self.answer.bind("<Return>", lambda e: self.submit())
         self.submit_btn = button(answer_row, "RESPONDER ↵", self.submit, True)
@@ -162,8 +173,19 @@ class Expedition(tk.Frame):
         self.map_positions = {}
         label(side, "Ciano: você · cheia: concluída · X: núcleo\nAlt + setas: mover · Alt + Q/E: olhar",
               9, MUTED, justify="left").pack(anchor="w", pady=6)
-        self.roster = label(side, "", 10, justify="left", anchor="w")
+        self.roster = tk.Frame(side, bg=PANEL)
         self.roster.pack(fill="x", pady=(4, 6))
+        self.player_cards = []
+        for i in range(len(game.scores)):
+            self.roster.columnconfigure(i % 2, weight=1, uniform="player")
+            card = tk.Frame(self.roster, bg=BG, padx=7, pady=5,
+                            highlightthickness=1, highlightbackground="#294048")
+            card.grid(row=i//2, column=i%2, sticky="ew", padx=(0 if i%2 == 0 else 5, 0), pady=2)
+            name = label(card, f"J{i+1}", 10, PLAYER_COLORS[i], anchor="w")
+            name.pack(fill="x")
+            score = label(card, "0 pts", 10, TEXT, anchor="w")
+            score.pack(fill="x")
+            self.player_cards.append((card, name, score))
         self.back_btn = button(side, "↶ Voltar pelo trajeto", self.back)
         self.back_btn.pack(fill="x", pady=4)
         tk.Checkbutton(side, text="Efeitos animados", variable=app.effects,
@@ -221,6 +243,7 @@ class Expedition(tk.Frame):
         exits = [room.key for room in self.game.exits()]
         moved = self.game.back() if back else self.game.enter(exits.index(target)) if target in exits else False
         if moved:
+            self.arrival_at = time.monotonic() if self.app.effects.get() else None
             self.resume_at = 0
             self.feedback.configure(text=ROOMS[self.game.current.kind][1], fg=MUTED)
             self.refresh()
@@ -242,7 +265,7 @@ class Expedition(tk.Frame):
             return "break"
         target = (self.facing + turn) % 4
         if self.app.effects.get():
-            self.transition = {"type": "look", "start": time.monotonic(), "duration": .34,
+            self.transition = {"type": "look", "start": time.monotonic(), "duration": .42,
                                "from": self.facing, "to": target, "turn": turn}
         else:
             self.facing = target
@@ -300,18 +323,20 @@ class Expedition(tk.Frame):
 
     def result(self, result):
         good = result["correct"]
-        self.feedback.configure(text=result["message"], fg=GOLD if good else RED)
+        author = result.get("player")
+        self.feedback.configure(text=(f"J{author} · " if author else "") + result["message"],
+                                fg=PLAYER_COLORS[author-1] if good and author else RED)
         self.resume_at = time.monotonic() + (1.3 if good else 3.0)
-        caption = f"+{result['points']:,}" if good else "−1 VIDA" if "answer" in result else "TEMPO ESGOTADO"
+        caption = f"J{author}  +{result['points']:,}" if good else "−1 VIDA" if "answer" in result else "TEMPO ESGOTADO"
         self.popups.append([caption,
-                            .5, .42, 1.6, GOLD if good else RED])
+                            .5, .42, 1.6, PLAYER_COLORS[author-1] if good and author else RED])
         if good and self.app.effects.get():
-            for _ in range(48):
+            for _ in range(28):
                 angle = random.random() * math.tau
                 speed = random.uniform(.12, .6)
                 self.particles.append([.5, .5, math.cos(angle)*speed,
                                        math.sin(angle)*speed, random.uniform(.5, 1.4),
-                                       random.choice((GOLD, TEAL, "#ffffff"))])
+                                       random.choice((PLAYER_COLORS[(author or 1)-1], "#dceeed"))])
         self.refresh()
 
     def refresh(self):
@@ -337,6 +362,9 @@ class Expedition(tk.Frame):
         self.answer.configure(state="normal" if g.question and playing else "disabled")
         self.submit_btn.configure(state="normal" if g.question and playing else "disabled")
         if g.question is None:
+            self.answer.configure(state="normal")
+            self.answer.delete(0, "end")
+            self.answer.configure(state="disabled")
             self._shown_question = None
         if g.question:
             if self._shown_question is not g.question:
@@ -355,7 +383,44 @@ class Expedition(tk.Frame):
             self.finished = True
             self.transition = None
             self.particles.clear()
+            self.arrival_at = None
+        self.update_players(time.monotonic())
         self.draw_map()
+
+    def update_players(self, now):
+        g = self.game
+        playing = g.status == "playing"
+        active = g.player if playing else None
+        if active != self._active_player:
+            self._active_player = active
+            self.turn_changed_at = now
+        color = PLAYER_COLORS[g.player] if playing else MUTED
+        state = (active, tuple(g.scores), g.status)
+        if state != self._player_state:
+            self._player_state = state
+            self.challenge.configure(highlightbackground=color)
+            self.answer.configure(highlightcolor=color, insertbackground=color)
+            self.submit_btn.configure(bg=color, activebackground=blend(color, TEXT, .3))
+            for i, (card, name, score) in enumerate(self.player_cards):
+                selected = i == active
+                card.configure(highlightbackground=PLAYER_COLORS[i] if selected else "#294048",
+                               bg="#193038" if selected else BG)
+                name.configure(text=f"J{i+1}  {'• SUA VEZ' if selected else '· FINAL' if not playing else '· ESPERA'}",
+                               bg=card.cget("bg"), fg=PLAYER_COLORS[i] if selected else MUTED)
+                score.configure(text=f"{g.scores[i]:,} pts", bg=card.cget("bg"))
+        c = self.player_badge
+        c.delete("all")
+        c.create_rectangle(0, 0, 231, 45, fill="#12232b", outline="#294048")
+        c.create_polygon(9, 11, 17, 5, 40, 5, 48, 13, 48, 36, 9, 36,
+                         fill=color, outline="")
+        c.create_text(29, 21, text=f"J{g.player+1}" if playing else "—", fill=BG,
+                      font=(FONT, 12, "bold"))
+        c.create_text(60, 11, text="NO CONTROLE" if playing else "EXPEDIÇÃO ENCERRADA",
+                      fill=MUTED, font=(FONT, 8), anchor="w")
+        c.create_text(60, 29, text=f"JOGADOR {g.player+1} · SUA VEZ" if playing else "PLACAR DA EQUIPE",
+                      fill=color, font=(FONT, 11, "bold"), anchor="w", tags="active_player")
+        fraction = smooth((now-self.turn_changed_at)/.5) if self.app.effects.get() else 1
+        c.create_line(1, 44, 1+230*fraction, 44, fill=color, width=2)
 
     def draw_map(self):
         c, g = self.map, self.game
@@ -421,24 +486,33 @@ class Expedition(tk.Frame):
         facing = self.facing
         opening = None
         camera = (1.0, 0.0, 0.0)
+        shade = 0.0
         if self.transition:
             action = self.transition
             progress = min(1.0, max(0.0, (now-action["start"])/action["duration"]))
             if action["type"] == "look":
                 half = progress*2 if progress < .5 else (1-progress)*2
-                shift = half*half*(3-2*half)*.24
+                shift = smooth(half)*.075
                 facing = action["from"] if progress < .5 else action["to"]
                 # Overscan keeps the room covering the viewport throughout the turn.
                 camera = (1.0 + 2*shift, -action["turn"]*shift if progress < .5 else action["turn"]*shift, 0.0)
+                shade = smooth((half-.45)/.55)
             else:
-                opening = (action["portal"], min(1.0, progress/.42))
-                walk = max(0.0, (progress-.42)/.58)
-                smooth = walk*walk*(3-2*walk)
+                opening = (action["portal"], smooth(progress/.46))
+                walk = max(0.0, (progress-.46)/.54)
+                travel = smooth(walk)
                 direction = action["portal"]
-                zoom = 1 + smooth*(1.7 if direction != 3 else -.12)
+                zoom = 1 + travel*(.75 if direction != 3 else .04)
                 # Steer the vanishing point toward the chosen doorway as we step.
-                shift = (.42 if direction == 0 else -.42 if direction == 2 else 0)*smooth
-                camera = (zoom, shift, math.sin(walk*math.pi*2)*.012)
+                shift = (.25 if direction == 0 else -.25 if direction == 2 else 0)*travel
+                camera = (zoom, shift, math.sin(walk*math.pi*2)*.005*math.sin(walk*math.pi))
+                shade = smooth((walk-.50)/.50)
+        elif self.arrival_at is not None and self.app.effects.get():
+            settle = smooth((now-self.arrival_at)/.20)
+            shade = 1-settle
+            camera = (1+.025*(1-settle), 0., 0.)
+            if settle >= 1:
+                self.arrival_at = None
         exits = g.exits()
         targets = self.portal_targets(facing)
         compass = self.relative_portals(facing)
@@ -451,17 +525,28 @@ class Expedition(tk.Frame):
         self.renderer.draw(room_key=g.current.key, kind=g.current.kind, portals=portals,
                            facing=COMPASS[facing][1], locked=not g.current.cleared,
                            opening=opening, camera=camera, now=now,
-                           effects=self.app.effects.get())
+                           effects=self.app.effects.get(),
+                           hovered=self.hover if not self.transition else None)
         if not g.current.cleared and g.status == "playing":
             color = ROOMS[g.current.kind][2]
             c.create_rectangle(w*.46,h*.43,w*.54,h*.60,fill="#10252e",outline=color,width=2)
             text(.5,.51,"?" if g.current.kind != "boss" else str(3-g.current.hits),color,20)
+        if shade and self.app.effects.get():
+            self.veil.draw(shade)
         if self.app.effects.get():
             for x, y, vx, vy, life, color in self.particles:
                 r = max(1, life*3)
                 c.create_oval(x*w-r,y*h-r,x*w+r,y*h+r,fill=color,outline="")
             for value, x, y, life, color in self.popups:
-                text(x,y,value,color,32)
+                text(x,y,value,blend(BG, color, min(1., life/.45)),26)
+        if (len(g.scores) > 1 and g.status == "playing" and self.app.effects.get()
+                and 0 < now-self.turn_changed_at < 1.25):
+            color = PLAYER_COLORS[g.player]
+            lift = 6*(1-smooth((now-self.turn_changed_at)/.25))
+            c.create_rectangle(w*.30, h*.10+lift, w*.70, h*.10+lift+34,
+                               fill=BG, outline=color, width=1)
+            c.create_text(w*.5, h*.10+lift+17, text=f"JOGADOR {g.player+1}  ·  SUA VEZ",
+                          fill=color, font=(FONT, 11, "bold"), tags="turn_notice")
         if self.finished:
             c.create_rectangle(w*.13,h*.25,w*.87,h*.75,fill=BG,outline=GOLD,width=2)
             won = g.status == "won"
@@ -486,20 +571,24 @@ class Expedition(tk.Frame):
         seconds = math.ceil(g.remaining)
         self.clock_label.configure(text=f"{seconds//60:02}:{seconds%60:02}", fg=RED if seconds <= 30 else GOLD)
         target = sum(g.scores)
-        self.display_score = min(target, self.display_score + max(1, int((target-self.display_score)*.18))) if self.app.effects.get() else target
-        self.score_label.configure(text=f"{self.display_score:,}")
+        self.display_score += (target-self.display_score)*(1-math.exp(-dt*12)) if self.app.effects.get() else target-self.display_score
+        if abs(target-self.display_score) < 1:
+            self.display_score = target
+        self.score_label.configure(text=f"{int(self.display_score):,}")
         multiplier = 1 + min(max(g.combo-1, 0), 9)*.25
         self.combo_label.configure(text=f"COMBO {g.combo}  /  MULTIPLICADOR ×{multiplier:.2f}")
-        self.roster.configure(text="\n".join(f"{'›' if i == g.player else ' '} J{i+1}    {s:,} pts" for i,s in enumerate(g.scores)))
+        self.update_players(now)
         qleft = g.question_remaining if g.question else 0
-        meta = f"JOGADOR {g.player+1}  /  {math.ceil(qleft)}s PARA RESPONDER" if g.question else "ESCOLHA SUA ROTA" if g.status == "playing" else "RESULTADO DA EXPEDIÇÃO"
+        meta = (f"JOGADOR {g.player+1} · SUA VEZ  /  {math.ceil(qleft)}s PARA RESPONDER" if g.question else
+                f"JOGADOR {g.player+1} · ESCOLHA SUA ROTA" if g.current.cleared else
+                f"JOGADOR {g.player+1} · PRÓXIMA RESPOSTA") if g.status == "playing" else "RESULTADO DA EQUIPE"
         if g.current.kind == "boss" and g.status == "playing":
             meta += f"  /  NÚCLEO {g.current.hits}/3"
-        self.q_meta.configure(text=meta, fg=RED if g.question and qleft<5 else TEAL)
+        self.q_meta.configure(text=meta, fg=RED if g.question and qleft<5 else PLAYER_COLORS[g.player] if g.status == "playing" else MUTED)
         self.q_bar.delete("all")
         if g.question:
             self.q_bar.create_rectangle(0,0,self.q_bar.winfo_width()*qleft/g.question_duration,4,
-                                        fill=RED if qleft<5 else TEAL,outline="")
+                                        fill=RED if qleft<5 else PLAYER_COLORS[g.player],outline="")
         for p in self.particles:
             p[0] += p[2]*dt
             p[1] += p[3]*dt
@@ -512,7 +601,9 @@ class Expedition(tk.Frame):
         self.popups = [p for p in self.popups if p[3]>0]
         self.draw_scene(now)
         self.draw_map()
-        self.job = self.after(33 if self.app.effects.get() else 100, self.frame)
+        # Account for drawing time instead of adding it to every frame interval.
+        interval = 33 if self.app.effects.get() else 100
+        self.job = self.after(max(8, interval-int((time.monotonic()-now)*1000)), self.frame)
 
 
 def main():

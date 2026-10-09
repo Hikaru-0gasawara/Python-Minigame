@@ -4,8 +4,8 @@ from dataclasses import dataclass
 import random
 import time
 
-from core import DifficultyHandler
 from dungeon_map import CARDINAL_DIRECTIONS, generate_layout
+from questions import TIERS, QuestionBank, is_correct
 
 
 MODES = {
@@ -55,7 +55,7 @@ class Dungeon:
         self.clock = clock
         self.deadline = clock() + budget
         self.budget = budget
-        self.bank = DifficultyHandler(difficulty)
+        self.bank = QuestionBank()
         self.room_count = 3 * (size - 1) + 2
         self.connections, depths, self.boss_key = generate_layout(self.rng, self.room_count)
         self.floors = depths[self.boss_key]
@@ -129,10 +129,8 @@ class Dungeon:
     def ask(self):
         if self.status != "playing" or self.remaining <= 0 or self.current.cleared or self.question is not None:
             return
-        # Match the campaign bank's exact boundaries (0 / 41 / 83).
         tier = min(2, self.current.depth * 3 // self.floors)
-        progress = (0, 41, 83)[tier]
-        self.question = self.rng.choice(self.bank.bank_for(progress).questions)
+        self.question = self.bank.draw(TIERS[tier if self.difficulty == 4 else self.difficulty - 1], self.rng)
         duration = self.base_question_time
         if self.difficulty == 4:
             duration = (30, 22, 15)[tier]
@@ -159,7 +157,7 @@ class Dungeon:
             return self.tick()
         expired = expired or self.question_remaining <= 0
         question = self.question
-        correct = not expired and DifficultyHandler.is_correct(question, answer)
+        correct = not expired and is_correct(question, answer)
         points = 0
         if correct:
             self.combo += 1
