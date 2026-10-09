@@ -8,6 +8,7 @@ import tkinter as tk
 
 from palette import hex_color
 from pixels import png
+from props import PROP_AT, decor_sprite, elite, prop_sprite
 from room_art import (BACK_DOOR, GUARDIAN_ASIDE, GUARDIAN_AT, H, W,
                       back_door, build_background, fade_veil, guardian, side_door)
 
@@ -40,9 +41,24 @@ class PixelView:
     def _copy(self, photo, x=0, y=0):
         self.frame.tk.call(self.frame, "copy", photo, "-to", x, y)
 
-    def compose(self, scene, fade=0, lights="on"):
-        """Draw the room into the frame and darken it by `fade` (0..4); the HUD goes on top."""
+    def _sprite(self, key, build, x, y):
+        self._copy(self._photo(key, lambda: build().png()), x, y)
+
+    def compose(self, scene, fade=0, lights="on", glitch=False):
+        """Draw the room into the frame and darken it by `fade` (0..4); the HUD goes on top.
+
+        Layers run back to front: wall decorations, doors and the core gate, floor
+        props, the Guardian, then cables hanging in front of everything.
+        """
         self._copy(self._background(scene, lights))
+        hanging = []
+        for name, variant, x, y in scene.decor:
+            if name == "cables":
+                hanging.append((variant, x, y))
+                continue
+            if name == "screen" and glitch:
+                variant = "static"
+            self._sprite(("decor", name, variant), lambda: decor_sprite(name, variant), x, y)
         for door in scene.doors:
             if door.portal == 1:
                 photo = self._photo(("back", scene.sector, door.locked),
@@ -52,10 +68,19 @@ class PixelView:
                 side = "left" if door.portal == 0 else "right"
                 self._copy(self._photo(("side", scene.sector, side, door.locked),
                                        lambda: side_door(scene.sector, side, door.locked).png()))
+        if scene.prop:
+            name, state = scene.prop
+            self._sprite(("prop", name, state), lambda: prop_sprite(name, state), *PROP_AT[name])
         if scene.guardian:
-            x, y = GUARDIAN_AT
-            photo = self._photo(("guardian", scene.guardian), lambda: guardian(scene.guardian).png())
-            self._copy(photo, x + (GUARDIAN_ASIDE if scene.guardian == "cleared" else 0), y)
+            aside = GUARDIAN_ASIDE if scene.guardian == "cleared" else 0
+            if scene.elite:
+                x, y = PROP_AT["elite"]
+                self._sprite(("elite", scene.guardian), lambda: elite(scene.guardian), x + aside, y)
+            else:
+                x, y = GUARDIAN_AT
+                self._sprite(("guardian", scene.guardian), lambda: guardian(scene.guardian), x + aside, y)
+        for variant, x, y in hanging:
+            self._sprite(("decor", "cables", variant), lambda: decor_sprite("cables", variant), x, y)
         if fade:
             self._copy(self._photo(("veil", fade), lambda: fade_veil(fade).png()))
 

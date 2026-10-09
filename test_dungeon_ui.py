@@ -321,6 +321,21 @@ class DungeonUITests(unittest.TestCase):
         self.assertIsNone(screen.transition)
         self.assertEqual((g.player, g.players[0].position), (1, room))
 
+    def test_ambient_particles_live_only_with_effects_and_in_their_room(self):
+        screen = self.start_seeded()
+        self.pump()
+        self.assertEqual(screen.particles, [])                 # reduced motion: nothing drifts
+        self.app.effects.set(True)
+        self.pump()
+        self.assertTrue(screen.particles)                      # dust, at least, fills the air
+        screen.enter(0)
+        screen.advance_transition(screen.transition["start"] + 1)
+        screen.draw_scene(0)
+        self.assertEqual(screen.particles, [])                 # a new room starts clean
+        self.app.effects.set(False)
+        self.pump()
+        self.assertEqual(screen.particles, [])
+
     # ---------------------------------------------------------------- players and HUD texts
 
     def active_cards(self, screen):

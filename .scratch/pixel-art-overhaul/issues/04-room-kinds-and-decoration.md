@@ -17,10 +17,10 @@ Decorative props are chosen from the Seed per Room: flickering tubes, sparking c
 
 **Blocked by:** 01.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Each Room kind shows its own prop; Elite and Exit are recognisable before any Question
-- [ ] Prop states follow the active player: a Mimic stays a chest until that player opened it; a Trap is spent after their visit; the Exit's locks match their Exit hits
-- [ ] Decorations and their placement are deterministic per Seed and differ between Rooms
-- [ ] Particles animate without changing the frame cost noticeably; reduced motion stops them
-- [ ] Scene model tests cover every kind and its per-player states
+- [x] Each Room kind shows its own prop; Elite and Exit are recognisable before any Question
+- [x] Prop states follow the active player: a Mimic stays a chest until that player opened it; a Trap is spent after their visit; the Exit's locks match their Exit hits
+- [x] Decorations and their placement are deterministic per Seed and differ between Rooms
+- [x] Particles animate without changing the frame cost noticeably; reduced motion stops them
+- [x] Scene model tests cover every kind and its per-player states

@@ -114,8 +114,10 @@ class ExpeditionScreen(tk.Frame):
         self.app, self.game = app, game
         self.job = None
         self.resume_at = 0
-        self.particles = []
+        self.particles = []          # [x, y, vx, vy, life, ink, gravity] in native pixels
         self.popups = []
+        self._scene = None
+        self._flicker_until = self._glitch_until = 0
         self.facings = [0] * len(game.players)
         self.last_frame = time.monotonic()
         self.hover = None
@@ -311,7 +313,7 @@ class ExpeditionScreen(tk.Frame):
                 angle = random.random() * math.tau
                 speed = random.uniform(20, 90)
                 self.particles.append([160., 100., math.cos(angle) * speed, math.sin(angle) * speed,
-                                       random.uniform(.5, 1.4), random.choice((ink, hud.TEXT))])
+                                       random.uniform(.5, 1.4), random.choice((ink, hud.TEXT)), 60])
         self.refresh()
 
     # ---------------------------------------------------------------- input regions
@@ -462,7 +464,11 @@ class ExpeditionScreen(tk.Frame):
         view = self.renderer
         self.canvas.delete("all")
         scene = scene_for(g, facing)
-        view.compose(scene, fade if effects else 0)
+        if self._scene is None or (scene.room_key, g.player) != (self._scene.room_key, self._scene_player):
+            self.particles.clear()       # particles belong to the room they were born in
+        self._scene, self._scene_player = scene, g.player
+        lights = "dimmed" if effects and scene.flicker and now < self._flicker_until else "on"
+        view.compose(scene, fade if effects else 0, lights, effects and now < self._glitch_until)
         can_retreat = playing and g.active.came_from is not None and not self.transition
         players = tuple((p.position, p.exit_hits, p.lives, p.skip_next, p.held) for p in g.players)
         self.regions = []
@@ -511,7 +517,7 @@ class ExpeditionScreen(tk.Frame):
             for text, ink, born in self.popups:
                 age = now - born
                 self._put(f"popup:{text}", ink, lambda: hud.banner([(text, ink)], 0, ink), y=int(84 - age * 14))
-            for x, y, _vx, _vy, _life, ink in self.particles:
+            for x, y, _vx, _vy, _life, ink, _gravity in self.particles:
                 view.fill(ink, int(x), int(y), int(x), int(y))
         if self.finished:
             winner = g.players[g.winner]
@@ -521,6 +527,25 @@ class ExpeditionScreen(tk.Frame):
         view.present()
         self.hud = {"badge": badge.texts, "map": mini.texts, "cards": cards.texts, "box": [t for t, _ in lines],
                     "tab": self.tab_rect is not None}
+
+    def ambience(self, now):
+        """Spawn the room's ambient particles and stutter its broken tube and screens."""
+        scene, rnd = self._scene, random.random
+        for kind, x, y in scene.emitters:
+            if kind == "dust" and sum(p[6] == 0 for p in self.particles) < 16:
+                self.particles.append([rnd() * 320, 20 + rnd() * 150, rnd() * 4 - 2, rnd() * 3 - 1.5,
+                                       3 + rnd() * 3, 6, 0])
+            elif kind == "sparks" and rnd() < .04:
+                for _ in range(5):
+                    self.particles.append([x + rnd() * 6 - 3, y, rnd() * 40 - 20, rnd() * 10, .7, 17, 140])
+            elif kind == "steam" and rnd() < .35:
+                self.particles.append([x + rnd() * 10 - 5, y, rnd() * 6 - 3, -14 - rnd() * 8, 1.4, 9, -2])
+            elif kind == "bubbles" and rnd() < .3:
+                self.particles.append([x + rnd() * 20 - 10, y + 20, 0, -10 - rnd() * 6, 1.8, 21, -1])
+        if scene.flicker and now >= self._flicker_until and rnd() < .02:
+            self._flicker_until = now + .05 + rnd() * .25
+        if any(d[0] == "screen" for d in scene.decor) and now >= self._glitch_until and rnd() < .01:
+            self._glitch_until = now + .15
 
     def frame(self):
         now = time.monotonic()
@@ -543,10 +568,14 @@ class ExpeditionScreen(tk.Frame):
             if self.game.question is not None:
                 self.refresh()
         self.update_players(now)
+        if self.app.effects.get() and self._scene is not None:
+            self.ambience(now)
+        else:
+            self.particles.clear()
         for p in self.particles:
             p[0] += p[2] * dt
             p[1] += p[3] * dt
-            p[3] += 60 * dt
+            p[3] += p[6] * dt
             p[4] -= dt
         self.particles = [p for p in self.particles if p[4] > 0]
         self.popups = [p for p in self.popups if now - p[2] < 1.6]
