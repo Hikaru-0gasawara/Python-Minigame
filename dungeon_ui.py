@@ -5,7 +5,7 @@ import random
 import time
 import tkinter as tk
 
-from dungeon import Expedition, ROOMS, format_seed
+from dungeon import EXIT_HITS, Expedition, ROOMS, format_seed
 from menu_ui import Setup
 from room_scene import RoomScene, DOOR_BOUNDS
 from motion import CanvasVeil, smooth, blend
@@ -25,8 +25,7 @@ PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
            ("L", "LESTE", (1, 0)), ("S", "SUL", (0, 1)))
 COMPASS = (("N", "NORTE", (0, -1)), ("L", "LESTE", (1, 0)),
            ("S", "SUL", (0, 1)), ("O", "OESTE", (-1, 0)))
-SYMBOLS = {"entrance": "E", "combat": "?", "treasure": "+", "elite": "!",
-           "sanctuary": "V", "clock": "T", "exit": "X"}
+SYMBOLS = {"entrance": "E", "combat": "?", "exit": "X"}
 
 
 def label(parent, text="", size=11, color=TEXT, **kwargs):
@@ -75,11 +74,10 @@ class ExpeditionScreen(tk.Frame):
         self.resume_at = 0
         self.particles = []
         self.popups = []
-        self.display_score = 0
+        self.facings = [0] * len(game.players)
         self.last_frame = time.monotonic()
         self.hover = None
         self.finished = False
-        self.facing = 0
         self.transition = None
         self._shown_question = None
         self.arrival_at = None
@@ -157,36 +155,28 @@ class ExpeditionScreen(tk.Frame):
         side = tk.Frame(self, bg=PANEL, width=306, padx=16, pady=14)
         side.grid(row=1, column=1, sticky="ns", padx=(0, 20), pady=(0, 18))
         side.pack_propagate(False)
-        label(side, "TEMPO DA EXPEDIÇÃO", 10, MUTED).pack(anchor="w")
-        self.clock_label = label(side, "", 28, GOLD)
-        self.clock_label.pack(anchor="w")
-        label(side, "O tempo corre também entre as portas.", 9, MUTED).pack(anchor="w")
-        self.score_label = label(side, "0", 26)
-        self.score_label.pack(anchor="w", pady=(8, 0))
-        self.combo_label = label(side, "PONTOS  /  COMBO ×1,00", 10, TEAL)
-        self.combo_label.pack(anchor="w")
         self.map_title = label(side, "PLANTA / ÁREA EXPLORADA", 10, TEAL)
-        self.map_title.pack(anchor="w", pady=(10, 4))
+        self.map_title.pack(anchor="w", pady=(0, 4))
         self.map = tk.Canvas(side, width=258, height=220, bg="#0e1726", highlightthickness=0)
         self.map.pack(fill="x")
         self.map.bind("<Button-1>", self.map_click)
         self.map_positions = {}
-        label(side, "Ciano: você · cheia: concluída · X: núcleo\nAlt + setas: mover · Alt + Q/E: olhar",
+        label(side, "Cheia: liberada · X: núcleo · ●: rivais\nAlt + setas: mover · Alt + Q/E: olhar",
               9, MUTED, justify="left").pack(anchor="w", pady=6)
         self.roster = tk.Frame(side, bg=PANEL)
         self.roster.pack(fill="x", pady=(4, 6))
         self.player_cards = []
-        for i in range(len(game.scores)):
+        for i in range(len(game.players)):
             self.roster.columnconfigure(i % 2, weight=1, uniform="player")
             card = tk.Frame(self.roster, bg=BG, padx=7, pady=5,
                             highlightthickness=1, highlightbackground="#294048")
             card.grid(row=i//2, column=i%2, sticky="ew", padx=(0 if i%2 == 0 else 5, 0), pady=2)
             name = label(card, f"J{i+1}", 10, PLAYER_COLORS[i], anchor="w")
             name.pack(fill="x")
-            score = label(card, "0 pts", 10, TEXT, anchor="w")
-            score.pack(fill="x")
-            self.player_cards.append((card, name, score))
-        self.back_btn = button(side, "↶ Voltar pelo trajeto", self.back)
+            status = label(card, "", 10, TEXT, anchor="w")
+            status.pack(fill="x")
+            self.player_cards.append((card, name, status))
+        self.back_btn = button(side, "↶ Recuar pelo trajeto", self.back)
         self.back_btn.pack(fill="x", pady=4)
         tk.Checkbutton(side, text="Efeitos animados", variable=app.effects,
                        bg=PANEL, fg=MUTED, selectcolor=BG,
@@ -213,6 +203,15 @@ class ExpeditionScreen(tk.Frame):
             self.app.unbind(sequence, binding)
         super().destroy()
 
+    @property
+    def facing(self):
+        """Each racer keeps their own camera between Turns."""
+        return self.facings[self.game.player]
+
+    @facing.setter
+    def facing(self, value):
+        self.facings[self.game.player] = value
+
     def resize_map(self, event):
         side = self.map.master
         used = 28  # Sidebar's vertical padding.
@@ -225,14 +224,14 @@ class ExpeditionScreen(tk.Frame):
 
     def enter(self, door):
         g = self.game
-        if self.transition or g.status != "playing" or g.remaining <= 0 or not g.current.cleared:
+        if self.transition or g.status != "playing" or g.question or not g.has_cleared(g.current):
             return
         exits = g.exits()
         if not isinstance(door, int) or not 0 <= door < len(exits):
             return
         if self.app.effects.get():
             self.transition = {"type": "move", "start": time.monotonic(), "duration": .72,
-                               "target": exits[door].key,
+                               "target": exits[door].key, "player": g.player,
                                "portal": self.portal_targets().index(door), "back": False}
             self.feedback.configure(text="Abrindo passagem…", fg=TEAL)
             self.refresh()
@@ -241,11 +240,12 @@ class ExpeditionScreen(tk.Frame):
 
     def _arrive(self, target, back=False):
         exits = [room.key for room in self.game.exits()]
-        moved = self.game.back() if back else self.game.enter(exits.index(target)) if target in exits else False
+        moved = self.game.retreat() if back else self.game.enter(exits.index(target)) if target in exits else False
         if moved:
             self.arrival_at = time.monotonic() if self.app.effects.get() else None
             self.resume_at = 0
-            self.feedback.configure(text=ROOMS[self.game.current.kind][1], fg=MUTED)
+            self.feedback.configure(text=ROOMS[self.game.current.kind][1] if self.game.question
+                                    else "Sala já liberada. A vez passa adiante.", fg=MUTED)
             self.refresh()
 
     def relative_portals(self, facing=None):
@@ -261,7 +261,7 @@ class ExpeditionScreen(tk.Frame):
                 for _, _, (dx, dy) in self.relative_portals(facing)]
 
     def look(self, turn):
-        if self.transition or self.game.status != "playing" or self.game.remaining <= 0:
+        if self.transition or self.game.status != "playing":
             return "break"
         target = (self.facing + turn) % 4
         if self.app.effects.get():
@@ -276,8 +276,10 @@ class ExpeditionScreen(tk.Frame):
         transition = self.transition
         if not transition:
             return
-        if self.game.status != "playing":
+        # A timeout may pass the Turn mid-walk; the walk belonged to the old racer.
+        if self.game.status != "playing" or transition.get("player", self.game.player) != self.game.player:
             self.transition = None
+            self.refresh()
             return
         if self.app.effects.get() and now < transition["start"] + transition["duration"]:
             return
@@ -303,12 +305,12 @@ class ExpeditionScreen(tk.Frame):
 
     def back(self):
         g = self.game
-        if self.transition or not g.history or not g.current.cleared or g.status != "playing" or g.remaining <= 0:
+        if self.transition or g.active.came_from is None or g.status != "playing":
             return
-        target = g.history[-1]
+        target = g.active.came_from
         if self.app.effects.get():
             index = [room.key for room in g.exits()].index(target)
-            self.transition = {"type": "move", "start": time.monotonic(), "duration": .72,
+            self.transition = {"type": "move", "start": time.monotonic(), "duration": .72, "player": g.player,
                                "target": target, "portal": self.portal_targets().index(index), "back": True}
             self.refresh()
         else:
@@ -327,7 +329,7 @@ class ExpeditionScreen(tk.Frame):
         self.feedback.configure(text=(f"J{author} · " if author else "") + result["message"],
                                 fg=PLAYER_COLORS[author-1] if good and author else RED)
         self.resume_at = time.monotonic() + (1.3 if good else 3.0)
-        caption = f"J{author}  +{result['points']:,}" if good else "−1 VIDA" if "answer" in result else "TEMPO ESGOTADO"
+        caption = f"J{author}  ✓" if good else "TEMPO ESGOTADO" if result["expired"] else "ERROU"
         self.popups.append([caption,
                             .5, .42, 1.6, PLAYER_COLORS[author-1] if good and author else RED])
         if good and self.app.effects.get():
@@ -342,7 +344,8 @@ class ExpeditionScreen(tk.Frame):
     def refresh(self):
         g = self.game
         playing = g.status == "playing"
-        ready = playing and g.current.cleared and not self.transition
+        here = g.has_cleared(g.current)
+        ready = playing and here and g.question is None and not self.transition
         self.room_title.configure(text=f"SETOR {g.current.x:+d}, {g.current.y:+d}  /  "
                                   f"{ROOMS[g.current.kind][0].upper()}")
         exits = g.exits()
@@ -350,13 +353,11 @@ class ExpeditionScreen(tk.Frame):
         for i, btn in enumerate(self.door_buttons):
             direction = self.relative_portals()[i][1]
             room = exits[targets[i]] if targets[i] is not None else None
-            hint = "Concluída" if room and room.cleared else ROOMS[room.kind][1] if room else "Sem passagem"
-            if room and room.kind == "elite" and not room.cleared:
-                hint = "×2 / tempo −25%"
+            hint = "Liberada" if room and g.has_cleared(room) else ROOMS[room.kind][1] if room else "Sem passagem"
             btn.configure(text=f"{direction}\n{ROOMS[room.kind][0] if room else 'PAREDE'}\n{hint}",
                           fg=ROOMS[room.kind][2] if room else MUTED,
                           state="normal" if ready and room else "disabled")
-        self.back_btn.configure(state="normal" if ready and g.history else "disabled")
+        self.back_btn.configure(state="normal" if playing and g.active.came_from and not self.transition else "disabled")
         for btn in self.look_buttons:
             btn.configure(state="normal" if playing and not self.transition else "disabled")
         self.answer.configure(state="normal" if g.question and playing else "disabled")
@@ -373,12 +374,11 @@ class ExpeditionScreen(tk.Frame):
             self.q_text.configure(text=g.question["question"])
             self.answer.focus_set()
         elif not playing:
-            self.q_text.configure(text="Núcleo resolvido. Expedição concluída!" if g.status == "won"
-                                  else "A expedição terminou. Uma nova rota espera por você.")
-        elif g.current.cleared:
-            self.q_text.configure(text="Área liberada. Explore uma passagem ou volte para outra rota.")
+            self.q_text.configure(text=f"Jogador {g.winner+1} escapou da masmorra!")
+        elif here:
+            self.q_text.configure(text="Área liberada. Escolha uma passagem.")
         else:
-            self.q_text.configure(text="Prepare-se para o próximo desafio…")
+            self.q_text.configure(text="O guardião aguarda. Responda ou recue pelo trajeto.")
         if not playing:
             self.finished = True
             self.transition = None
@@ -394,30 +394,33 @@ class ExpeditionScreen(tk.Frame):
         if active != self._active_player:
             self._active_player = active
             self.turn_changed_at = now
-        color = PLAYER_COLORS[g.player] if playing else MUTED
-        state = (active, tuple(g.scores), g.status)
+        color = PLAYER_COLORS[g.player if playing else g.winner]
+        state = (active, tuple((p.position, p.exit_hits) for p in g.players), g.status)
         if state != self._player_state:
             self._player_state = state
             self.challenge.configure(highlightbackground=color)
             self.answer.configure(highlightcolor=color, insertbackground=color)
             self.submit_btn.configure(bg=color, activebackground=blend(color, TEXT, .3))
-            for i, (card, name, score) in enumerate(self.player_cards):
+            for i, (card, name, status) in enumerate(self.player_cards):
                 selected = i == active
                 card.configure(highlightbackground=PLAYER_COLORS[i] if selected else "#294048",
                                bg="#193038" if selected else BG)
-                name.configure(text=f"J{i+1}  {'• SUA VEZ' if selected else '· FINAL' if not playing else '· ESPERA'}",
-                               bg=card.cget("bg"), fg=PLAYER_COLORS[i] if selected else MUTED)
-                score.configure(text=f"{g.scores[i]:,} pts", bg=card.cget("bg"))
+                tag = '• SUA VEZ' if selected else '★ ESCAPOU' if i == g.winner else '· ESPERA'
+                name.configure(text=f"J{i+1}  {tag}", bg=card.cget("bg"),
+                               fg=PLAYER_COLORS[i] if selected or i == g.winner else MUTED)
+                player = g.players[i]
+                status.configure(text=f"PROF. {g.dungeon.rooms[player.position].depth}"
+                                 f"  ·  X {player.exit_hits}/{EXIT_HITS}", bg=card.cget("bg"))
         c = self.player_badge
         c.delete("all")
         c.create_rectangle(0, 0, 231, 45, fill="#12232b", outline="#294048")
         c.create_polygon(9, 11, 17, 5, 40, 5, 48, 13, 48, 36, 9, 36,
                          fill=color, outline="")
-        c.create_text(29, 21, text=f"J{g.player+1}" if playing else "—", fill=BG,
+        c.create_text(29, 21, text=f"J{(g.player if playing else g.winner)+1}", fill=BG,
                       font=(FONT, 12, "bold"))
-        c.create_text(60, 11, text="NO CONTROLE" if playing else "EXPEDIÇÃO ENCERRADA",
+        c.create_text(60, 11, text="NO CONTROLE" if playing else "CORRIDA ENCERRADA",
                       fill=MUTED, font=(FONT, 8), anchor="w")
-        c.create_text(60, 29, text=f"JOGADOR {g.player+1} · SUA VEZ" if playing else "PLACAR DA EQUIPE",
+        c.create_text(60, 29, text=f"JOGADOR {g.player+1} · SUA VEZ" if playing else f"JOGADOR {g.winner+1} VENCEU",
                       fill=color, font=(FONT, 11, "bold"), anchor="w", tags="active_player")
         fraction = smooth((now-self.turn_changed_at)/.5) if self.app.effects.get() else 1
         c.create_line(1, 44, 1+230*fraction, 44, fill=color, width=2)
@@ -427,34 +430,46 @@ class ExpeditionScreen(tk.Frame):
         c.delete("all")
         w = max(c.winfo_width(), 258)
         h = max(c.winfo_height(), 80)
-        keys = g.revealed
+        # Only the active racer's Map, plus where every rival stands.
+        me = g.active
+        rivals = [(i, p.position) for i, p in enumerate(g.players) if i != g.player]
+        keys = me.revealed | {position for _, position in rivals}
         min_x, max_x = min(k[0] for k in keys), max(k[0] for k in keys)
         min_y, max_y = min(k[1] for k in keys), max(k[1] for k in keys)
         step = min(36, (w-42)/max(1, max_x-min_x), (h-42)/max(1, max_y-min_y))
         ox = w/2 - (min_x+max_x)*step/2
         oy = h/2 - (min_y+max_y)*step/2
         positions = {key: (ox + key[0]*step, oy + key[1]*step) for key in keys}
-        self.map_positions = positions
+        self.map_positions = {key: positions[key] for key in me.revealed}
         radius = self.map_radius = max(2, min(8, step*.26))
-        for key, (x, y) in positions.items():
+        for key in me.revealed:
+            x, y = positions[key]
             for target in g.dungeon.connections[key]:
-                if target in positions and key < target and (key in g.visited or target in g.visited):
+                if target in me.revealed and key < target and (key in me.visited or target in me.visited):
                     tx, ty = positions[target]
                     c.create_line(x, y, tx, ty, fill="#34535c", width=3, tags="corridor")
-        for key, (x, y) in positions.items():
+        color_here = PLAYER_COLORS[g.player]
+        for key in me.revealed:
+            x, y = positions[key]
             room = g.dungeon.rooms[key]
             current = key == g.current.key
-            color = TEAL if current else ROOMS[room.kind][2]
+            cleared = key in me.cleared
+            color = color_here if current else ROOMS[room.kind][2]
             if current:
-                c.create_rectangle(x-radius-3, y-radius-3, x+radius+3, y+radius+3, outline=TEAL, width=1)
+                c.create_rectangle(x-radius-3, y-radius-3, x+radius+3, y+radius+3, outline=color_here, width=1)
             c.create_rectangle(x-radius, y-radius, x+radius, y+radius,
-                               fill=color if room.cleared or current else BG, outline=color,
+                               fill=color if cleared or current else BG, outline=color,
                                width=1, tags=("room", f"room:{key[0]}:{key[1]}"))
             if radius >= 5:
                 c.create_text(x, y, text=("↑", "→", "↓", "←")[self.facing] if current else SYMBOLS[room.kind],
-                              fill=BG if room.cleared or current else color, font=(FONT, 8, "bold"))
+                              fill=BG if cleared or current else color, font=(FONT, 8, "bold"))
+        for i, key in rivals:
+            x, y = positions[key]
+            # Rivals sharing a Room fan out so every dot stays visible.
+            dx = (i - 1.5) * max(2, radius*.6)
+            c.create_oval(x+dx-3, y+radius+1, x+dx+3, y+radius+7, fill=PLAYER_COLORS[i], outline=BG, tags="rival")
         c.create_text(w-8, 10, text="N ↑", anchor="ne", fill=MUTED, font=(FONT, 8))
-        self.map_title.configure(text=f"PLANTA / {len(g.visited)} SALAS · SEED {format_seed(g.seed)}")
+        self.map_title.configure(text=f"PLANTA J{g.player+1} / {len(me.visited)} SALAS · SEED {format_seed(g.seed)}")
 
     def door_at(self, event):
         w, h = max(self.scene.winfo_width(), 1), max(self.scene.winfo_height(), 1)
@@ -470,7 +485,7 @@ class ExpeditionScreen(tk.Frame):
 
     def motion(self, event):
         self.hover = self.door_at(event)
-        self.scene.configure(cursor="hand2" if self.hover is not None and self.game.current.cleared and not self.transition else "")
+        self.scene.configure(cursor="hand2" if self.hover is not None and self.game.has_cleared(self.game.current) and not self.transition else "")
 
     def scene_click(self, event):
         door = self.door_at(event)
@@ -521,16 +536,17 @@ class ExpeditionScreen(tk.Frame):
             room = exits[index] if index is not None else None
             portals.append(None if room is None else {
                 "label": ROOMS[room.kind][0], "compass": compass[i][0],
-                "color": ROOMS[room.kind][2], "cleared": room.cleared})
+                "color": ROOMS[room.kind][2], "cleared": g.has_cleared(room)})
+        here = g.has_cleared(g.current)
         self.renderer.draw(room_key=g.current.key, kind=g.current.kind, portals=portals,
-                           facing=COMPASS[facing][1], locked=not g.current.cleared,
+                           facing=COMPASS[facing][1], locked=not here,
                            opening=opening, camera=camera, now=now,
                            effects=self.app.effects.get(),
                            hovered=self.hover if not self.transition else None)
-        if not g.current.cleared and g.status == "playing":
+        if not here and g.status == "playing":
             color = ROOMS[g.current.kind][2]
             c.create_rectangle(w*.46,h*.43,w*.54,h*.60,fill="#10252e",outline=color,width=2)
-            text(.5,.51,"?" if g.current.kind != "exit" else str(3-g.current.hits),color,20)
+            text(.5,.51,"?" if g.current.kind != "exit" else str(EXIT_HITS-g.active.exit_hits),color,20)
         if shade and self.app.effects.get():
             self.veil.draw(shade)
         if self.app.effects.get():
@@ -539,7 +555,7 @@ class ExpeditionScreen(tk.Frame):
                 c.create_oval(x*w-r,y*h-r,x*w+r,y*h+r,fill=color,outline="")
             for value, x, y, life, color in self.popups:
                 text(x,y,value,blend(BG, color, min(1., life/.45)),26)
-        if (len(g.scores) > 1 and g.status == "playing" and self.app.effects.get()
+        if (len(g.players) > 1 and g.status == "playing" and self.app.effects.get()
                 and 0 < now-self.turn_changed_at < 1.25):
             color = PLAYER_COLORS[g.player]
             lift = 6*(1-smooth((now-self.turn_changed_at)/.25))
@@ -549,10 +565,9 @@ class ExpeditionScreen(tk.Frame):
                           fill=color, font=(FONT, 11, "bold"), tags="turn_notice")
         if self.finished:
             c.create_rectangle(w*.13,h*.25,w*.87,h*.75,fill=BG,outline=GOLD,width=2)
-            won = g.status == "won"
-            text(.5,.37,"MASMORRA CONQUISTADA" if won else "FIM DA EXPEDIÇÃO",GOLD if won else RED,22)
-            text(.5,.50,f"{sum(g.scores):,} PONTOS",TEXT,30)
-            text(.5,.63,f"Melhor combo: {g.best_combo}  ·  Salas visitadas: {len(g.visited)}",MUTED,11)
+            text(.5,.37,"MASMORRA CONQUISTADA",GOLD,22)
+            text(.5,.50,f"JOGADOR {g.winner+1} ESCAPOU",PLAYER_COLORS[g.winner],30)
+            text(.5,.63,f"Seed {format_seed(g.seed)}  ·  Salas visitadas: {len(g.players[g.winner].visited)}",MUTED,11)
 
     def frame(self):
         now = time.monotonic()
@@ -567,23 +582,14 @@ class ExpeditionScreen(tk.Frame):
             self.game.ask()
             self.refresh()
         g = self.game
-        self.stats.configure(text=f"{'♥' * g.lives}{'♡' * (5-g.lives)}  /  {g.name.upper()}")
-        seconds = math.ceil(g.remaining)
-        self.clock_label.configure(text=f"{seconds//60:02}:{seconds%60:02}", fg=RED if seconds <= 30 else GOLD)
-        target = sum(g.scores)
-        self.display_score += (target-self.display_score)*(1-math.exp(-dt*12)) if self.app.effects.get() else target-self.display_score
-        if abs(target-self.display_score) < 1:
-            self.display_score = target
-        self.score_label.configure(text=f"{int(self.display_score):,}")
-        multiplier = 1 + min(max(g.combo-1, 0), 9)*.25
-        self.combo_label.configure(text=f"COMBO {g.combo}  /  MULTIPLICADOR ×{multiplier:.2f}")
+        self.stats.configure(text=g.name.upper())
         self.update_players(now)
         qleft = g.question_remaining if g.question else 0
         meta = (f"JOGADOR {g.player+1} · SUA VEZ  /  {math.ceil(qleft)}s PARA RESPONDER" if g.question else
-                f"JOGADOR {g.player+1} · ESCOLHA SUA ROTA" if g.current.cleared else
-                f"JOGADOR {g.player+1} · PRÓXIMA RESPOSTA") if g.status == "playing" else "RESULTADO DA EQUIPE"
+                f"JOGADOR {g.player+1} · ESCOLHA SUA ROTA" if g.has_cleared(g.current) else
+                f"JOGADOR {g.player+1} · RESPONDA OU RECUE") if g.status == "playing" else "FIM DA CORRIDA"
         if g.current.kind == "exit" and g.status == "playing":
-            meta += f"  /  NÚCLEO {g.current.hits}/3"
+            meta += f"  /  NÚCLEO {g.active.exit_hits}/{EXIT_HITS}"
         self.q_meta.configure(text=meta, fg=RED if g.question and qleft<5 else PLAYER_COLORS[g.player] if g.status == "playing" else MUTED)
         self.q_bar.delete("all")
         if g.question:

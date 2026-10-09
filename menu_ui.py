@@ -19,9 +19,9 @@ GOLD = "#efc788"
 FONT = "Segoe UI"
 
 MODE_COPY = {
-    1: ("01 / DESCOBERTA", "No seu ritmo", "Mais tempo para pensar e encontrar seu caminho."),
-    2: ("02 / DESAFIO", "Mantenha o combo", "Decisões rápidas. Acertos que viram combos."),
-    3: ("03 / PRESSÃO", "Tempo é tudo", "Uma expedição intensa para quem aceita o risco."),
+    1: ("01 / DESCOBERTA", "No seu ritmo", "Masmorra pequena e mais tempo para pensar."),
+    2: ("02 / DESAFIO", "Mais caminhos", "Mais salas, mais bifurcações e menos tempo."),
+    3: ("03 / PRESSÃO", "Tempo é tudo", "A maior masmorra, com o menor tempo por pergunta."),
     4: ("04 / JORNADA", "Desafio crescente", "As perguntas ficam mais difíceis rumo ao núcleo."),
 }
 
@@ -103,14 +103,14 @@ class Setup(tk.Frame):
         stats = tk.Frame(form, bg=BG, padx=10, pady=7)
         stats.pack(fill="x")
         self.stat_values = []
-        for i, name in enumerate(("EXPEDIÇÃO", "POR PERGUNTA", "SALAS")):
+        for i, name in enumerate(("POR PERGUNTA", "SALAS")):
             stats.columnconfigure(i, weight=1, uniform="stat")
             value = _label(stats, "", 15, GOLD)
             value.grid(row=0, column=i)
             _label(stats, name, 8, MUTED).grid(row=1, column=i, pady=(3, 0))
             self.stat_values.append(value)
 
-        _label(form, "02  /  SUA EQUIPE", 9, MUTED, anchor="w").pack(fill="x", pady=(12, 6))
+        _label(form, "02  /  JOGADORES", 9, MUTED, anchor="w").pack(fill="x", pady=(12, 6))
         players = tk.Frame(form, bg=PANEL)
         players.pack(fill="x")
         for value in range(1, 5):
@@ -145,7 +145,7 @@ class Setup(tk.Frame):
         self.start_btn.configure(bg=TEAL, fg=BG, activebackground="#b5fff5",
                                  activeforeground=BG, font=(FONT, 11, "bold"), pady=12)
         self.start_btn.pack(fill="x")
-        _label(form, "5 vidas · acertos em sequência · caminhos imprevisíveis", 8,
+        _label(form, "Cada um por si · o primeiro a escapar vence", 8,
                MUTED).pack(pady=(8, 0))
 
         footer = tk.Frame(self, bg=BG)
@@ -182,8 +182,8 @@ class Setup(tk.Frame):
                           highlightbackground=TEAL if selected else LINE,
                           text=f"{'●' if selected else '○'}  {name}\n{MODE_COPY[i][1]}")
         self.mode_description.configure(text=MODE_COPY[value][2])
-        _name, rooms, duration, question = MODES[value]
-        values = (f"{duration//60}:{duration%60:02}", "30 → 15s" if value == 4 else f"{question}s", str(rooms))
+        _name, rooms, question = MODES[value]
+        values = ("30 → 15s" if value == 4 else f"{question}s", str(rooms))
         for widget, text in zip(self.stat_values, values):
             widget.configure(text=text)
 
@@ -193,7 +193,7 @@ class Setup(tk.Frame):
             btn.configure(bg="#193e45" if i == value else CARD,
                           fg=TEAL if i == value else TEXT,
                           highlightbackground=TEAL if i == value else LINE)
-        text = "Você e o desconhecido." if value == 1 else f"{value} jogadores locais · respostas em turnos."
+        text = "Você e o desconhecido." if value == 1 else f"{value} jogadores locais · um movimento por turno."
         self.player_description.configure(text=text)
 
     def _start(self):
@@ -286,9 +286,9 @@ class Setup(tk.Frame):
         dialog.resizable(False, False)
         _label(dialog, "CADA RESPOSTA ABRE UM CAMINHO", 16, TEAL).pack(anchor="w", pady=(0, 18))
         for title, detail in (
-            ("01  EXPLORE", "Escolha portas e descubra a masmorra pelo minimapa.\nAlt + setas: mover. Alt + Q/E: olhar para os lados."),
-            ("02  RESPONDA", "Digite a resposta em inglês e pressione Enter.\nAcertos em sequência e velocidade aumentam os pontos."),
-            ("03  ENCONTRE O NÚCLEO", "Vença seus 3 desafios antes que o tempo acabe.\nA equipe compartilha 5 vidas e o relógio da expedição."),
+            ("01  EXPLORE", "Um movimento por turno; seu mapa mostra só o que você descobriu.\nAlt + setas: mover. Alt + Q/E: olhar para os lados."),
+            ("02  RESPONDA", "Cada guardião pergunta a todo jogador que entra na sala.\nDigite a resposta em inglês e pressione Enter, ou recue."),
+            ("03  ESCAPE PRIMEIRO", "Acerte 3 perguntas do núcleo, uma por turno.\nO primeiro jogador a escapar vence a corrida."),
         ):
             _label(dialog, title, 10, GOLD).pack(anchor="w")
             _label(dialog, detail, 11, TEXT, justify="left").pack(anchor="w", pady=(5, 17))

@@ -6,15 +6,15 @@ Each player has their own Revealed, Visited and Cleared sets. Entering Reveals t
 
 **Blocked by:** 01, 02.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Turns rotate P1 to Pn; each Turn is one move, plus a Question when the Room demands one
-- [ ] Each Guardian questions every player who enters until that player Clears it; Cleared state is per player
-- [ ] Questions never repeat within an Expedition; Question timeout counts as wrong and ends the Turn
-- [ ] A player in an un-Cleared Room can answer again or Retreat on their Turn
-- [ ] The Exit needs three correct answers across Turns; progress survives leaving; the first to three wins and the Expedition ends
-- [ ] Revealed / Visited / Cleared are per player; the Map and minimap show only the active player's Revealed Rooms and passages, plus every player's position
-- [ ] The turn indicator identifies the active player; four players fit the minimum window
-- [ ] Score, combo, speed bonus, global clock and shared lives no longer exist in rules or screen
-- [ ] Invalid actions (wrong player, missing door, no Question, game over) are rejected without side effects
-- [ ] Rules are tested Tk-free through the Expedition's public actions and readable state; existing UI tests (portals, camera, transitions, reduced motion, callback cancellation) are rebased onto Turns
+- [x] Turns rotate P1 to Pn; each Turn is one move, plus a Question when the Room demands one
+- [x] Each Guardian questions every player who enters until that player Clears it; Cleared state is per player
+- [x] Questions never repeat within an Expedition; Question timeout counts as wrong and ends the Turn
+- [x] A player in an un-Cleared Room can answer again or Retreat on their Turn
+- [x] The Exit needs three correct answers across Turns; progress survives leaving; the first to three wins and the Expedition ends
+- [x] Revealed / Visited / Cleared are per player; the Map and minimap show only the active player's Revealed Rooms and passages, plus every player's position
+- [x] The turn indicator identifies the active player; four players fit the minimum window
+- [x] Score, combo, speed bonus, global clock and shared lives no longer exist in rules or screen
+- [x] Invalid actions (wrong player, missing door, no Question, game over) are rejected without side effects
+- [x] Rules are tested Tk-free through the Expedition's public actions and readable state; existing UI tests (portals, camera, transitions, reduced motion, callback cancellation) are rebased onto Turns

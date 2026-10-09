@@ -1,6 +1,6 @@
-"""Dungeon rules, independent of Tk: spatial exploration, trivia and rewards."""
+"""Dungeon rules, independent of Tk: a competitive race through one Dungeon."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import random
 import time
 
@@ -9,22 +9,20 @@ from questions import TIERS, QuestionBank, is_correct
 
 
 EASY, MEDIUM, HARD, CAMPAIGN = 1, 2, 3, 4
-# Difficulty: on-screen name, Rooms, expedition seconds, seconds per Question.
+# Difficulty: on-screen name, Rooms, seconds per Question.
 MODES = {
-    EASY: ("Aventureiro", 15, 240, 30),
-    MEDIUM: ("Guerreiro", 22, 190, 22),
-    HARD: ("Pesadelo", 30, 145, 15),
-    CAMPAIGN: ("Campanha", 30, 300, 30),
+    EASY: ("Aventureiro", 15, 30),
+    MEDIUM: ("Guerreiro", 22, 22),
+    HARD: ("Pesadelo", 30, 15),
+    CAMPAIGN: ("Campanha", 30, 30),
 }
 SEED_SPACE = 16 ** 8
+EXIT_HITS = 3
+# Room kind: on-screen name, hint, colour.
 ROOMS = {
-    "combat": ("Terminal", "Desafio de quiz", "#24e5dd", 1.0),
-    "treasure": ("Cache", "Pontos ×1,5", "#f3c66b", 1.5),
-    "elite": ("Sobrecarga", "Pontos ×2 · tempo −25%", "#f57888", 2.0),
-    "sanctuary": ("Recuperação", "+1 vida ao acertar", "#86e4b4", 1.0),
-    "clock": ("Sincronizador", "+12s ao acertar", "#b49aff", 1.0),
-    "exit": ("Núcleo", "3 acertos para vencer", "#f57888", 3.0),
-    "entrance": ("Entrada", "Escolha sua primeira porta", "#66cde5", 1.0),
+    "combat": ("Guardião", "Responda para passar", "#24e5dd"),
+    "exit": ("Núcleo", f"{EXIT_HITS} acertos para escapar", "#f57888"),
+    "entrance": ("Entrada", "Ponto de partida", "#66cde5"),
 }
 
 
@@ -34,8 +32,6 @@ class Room:
     y: int
     kind: str
     depth: int
-    cleared: bool = False
-    hits: int = 0
 
     @property
     def key(self):
@@ -51,6 +47,18 @@ class Dungeon:
     rooms: dict
     exit_key: tuple
     entrance_key: tuple = (0, 0)
+
+
+@dataclass
+class Player:
+    """Everything one racer knows and has done; nothing here is shared."""
+
+    position: tuple
+    came_from: tuple = None
+    visited: set = field(default_factory=set)
+    revealed: set = field(default_factory=set)
+    cleared: set = field(default_factory=set)
+    exit_hits: int = 0
 
 
 def random_seed():
@@ -76,156 +84,138 @@ def generate_dungeon(seed, difficulty):
     connections, depths, exit_key = generate_layout(rng, MODES[difficulty][1])
     rooms = {}
     for x, y in connections:
-        kind = rng.choice(list(ROOMS)[:5])
-        if (x, y) == (0, 0):
-            kind = "entrance"
-        elif (x, y) == exit_key:
-            kind = "exit"
-        rooms[x, y] = Room(x, y, kind, depths[x, y], cleared=kind == "entrance")
+        kind = "entrance" if (x, y) == (0, 0) else "exit" if (x, y) == exit_key else "combat"
+        rooms[x, y] = Room(x, y, kind, depths[x, y])
     return Dungeon(seed, connections, rooms, exit_key)
 
 
 class Expedition:
-    """One game in a Dungeon whose Rooms have north/east/south/west doors.
+    """Players race through one Dungeon, one move per Turn, in fixed order.
 
-    The entire expedition shares a clock and lives. In local cooperative play,
-    each submitted answer rotates the active player and scores individually.
+    Every action belongs to the active player, so nobody can act out of turn.
+    A Guardian questions each player who enters until that player Clears it;
+    the first player to answer the Exit's Guardian three times wins.
     """
 
     def __init__(self, difficulty=EASY, players=1, seed=None, clock=time.monotonic):
         if difficulty not in MODES or not 1 <= players <= 4:
             raise ValueError("Invalid difficulty or player count")
         self.difficulty = difficulty
-        self.name, _rooms, budget, self.base_question_time = MODES[difficulty]
+        self.name, _rooms, self.base_question_time = MODES[difficulty]
         self.seed = random_seed() if seed is None else seed
         self.dungeon = generate_dungeon(self.seed, difficulty)
         # Questions use their own stream so play never alters the Dungeon.
         self.rng = random.Random(f"questions:{self.seed}")
         self.clock = clock
-        self.deadline = clock() + budget
-        self.budget = budget
         self.bank = QuestionBank()
-        self.current = self.dungeon.rooms[0, 0]
-        self.history = []
-        self.visited = {self.current.key}
-        self.revealed = {self.current.key}
-        self.scores = [0] * players
+        entrance = self.dungeon.entrance_key
+        self.players = [Player(entrance, cleared={entrance}) for _ in range(players)]
+        for player in self.players:
+            self._arrive(player, entrance)
         self.player = 0
-        self.combo = 0
-        self.best_combo = 0
-        self.lives = 5
         self.question = None
         self.question_deadline = 0
         self.question_duration = 0
         self.status = "playing"
-        self.finished_remaining = None
-        self.reveal()
+        self.winner = None
 
     @property
-    def remaining(self):
-        if self.finished_remaining is not None:
-            return self.finished_remaining
-        return max(0, self.deadline - self.clock())
+    def active(self):
+        return self.players[self.player]
 
-    def finish(self, status):
-        self.finished_remaining = self.remaining
-        self.status = status
+    @property
+    def current(self):
+        return self.dungeon.rooms[self.active.position]
 
     @property
     def question_remaining(self):
-        return max(0, min(self.remaining, self.question_deadline - self.clock()))
+        return max(0, self.question_deadline - self.clock())
 
-    def exits(self):
+    def has_cleared(self, room, player=None):
+        return room.key in (player or self.active).cleared
+
+    def exits(self, room=None):
         """Existing doors in compass order, including already visited rooms."""
-        x, y = self.current.key
+        x, y = (room or self.current).key
         return [self.dungeon.rooms[x + dx, y + dy] for dx, dy in CARDINAL_DIRECTIONS
-                if (x + dx, y + dy) in self.dungeon.connections[self.current.key]]
+                if (x + dx, y + dy) in self.dungeon.connections[x, y]]
 
-    def reveal(self):
-        self.revealed.update(room.key for room in self.exits())
+    def _arrive(self, player, key):
+        player.position = key
+        player.visited.add(key)
+        player.revealed.add(key)
+        player.revealed.update(self.dungeon.connections[key])
+
+    def _end_turn(self):
+        self.question = None
+        self.player = (self.player + 1) % len(self.players)
+
+    def _move(self, key):
+        """Arrive in a Room; a Guardian not yet Cleared keeps the Turn going."""
+        player = self.active
+        player.came_from = player.position
+        self._arrive(player, key)
+        if self.has_cleared(self.current):
+            self._end_turn()
+        else:
+            self.ask()
 
     def enter(self, door):
-        if self.status != "playing" or self.remaining <= 0 or not self.current.cleared:
+        if self.status != "playing" or self.question is not None or not self.has_cleared(self.current):
             return False
         exits = self.exits()
         if not isinstance(door, int) or not 0 <= door < len(exits):
             return False
-        self.history.append(self.current.key)
-        self.current = exits[door]
-        self.visited.add(self.current.key)
-        self.reveal()
-        self.ask()
+        self._move(exits[door].key)
         return True
 
-    def back(self):
-        if self.status != "playing" or self.remaining <= 0 or not self.current.cleared or not self.history:
+    def retreat(self):
+        """Go back to the Room the player came from, abandoning any Question."""
+        if self.status != "playing" or self.active.came_from is None:
             return False
-        self.current = self.dungeon.rooms[self.history.pop()]
-        self.reveal()
+        self.question = None
+        self._move(self.active.came_from)
         return True
 
     def ask(self):
-        if self.status != "playing" or self.remaining <= 0 or self.current.cleared or self.question is not None:
+        if self.status != "playing" or self.question is not None or self.has_cleared(self.current):
             return
         tier = min(2, self.current.depth * 3 // self.dungeon.rooms[self.dungeon.exit_key].depth)
         self.question = self.bank.draw(TIERS[tier if self.difficulty == CAMPAIGN else self.difficulty - 1], self.rng)
         duration = self.base_question_time
         if self.difficulty == CAMPAIGN:
             duration = (30, 22, 15)[tier]
-        if self.current.kind == "elite":
-            duration *= .75
         self.question_duration = duration
         self.question_deadline = self.clock() + duration
 
     def tick(self):
-        if self.status != "playing":
-            return None
-        if self.remaining <= 0:
-            self.finish("lost")
-            self.question = None
-            return {"correct": False, "points": 0, "message": "A masmorra se fechou. Tempo esgotado!"}
-        if self.question is not None and self.question_remaining <= 0:
+        if self.status == "playing" and self.question is not None and self.question_remaining <= 0:
             return self.submit("", expired=True)
         return None
 
     def submit(self, answer, expired=False):
         if self.status != "playing" or self.question is None:
             return None
-        if self.remaining <= 0:
-            return self.tick()
         expired = expired or self.question_remaining <= 0
-        question = self.question
+        question, player, room = self.question, self.active, self.current
         correct = not expired and is_correct(question, answer)
-        points = 0
-        if correct:
-            self.combo += 1
-            self.best_combo = max(self.combo, self.best_combo)
-            multiplier = 1 + min(self.combo - 1, 9) * .25
-            speed = int(1000 * self.question_remaining / self.question_duration)
-            points = int((1000 + speed) * multiplier * ROOMS[self.current.kind][3])
-            self.scores[self.player] += points
-            self.current.hits += 1
-            self.current.cleared = self.current.kind != "exit" or self.current.hits >= 3
-            reward = ""
-            if self.current.cleared:
-                if self.current.kind == "clock":
-                    self.deadline += 12
-                    reward = " · +12s"
-                elif self.current.kind == "sanctuary":
-                    self.lives = min(5, self.lives + 1)
-                    reward = " · vida restaurada"
-            message = f"+{points:,} pontos · combo {self.combo}{reward}"
-            if self.current.kind == "exit" and self.current.cleared:
-                self.finish("won")
-        else:
-            self.lives -= 1
-            self.combo = 0
+        if not correct:
             reason = "Tempo da pergunta esgotado" if expired else "Resposta incorreta"
             message = f"{reason}. Resposta: {question['answer']}"
-            if self.lives <= 0:
-                self.finish("lost")
-        result = {"correct": correct, "points": points, "message": message,
+        elif room.kind == "exit":
+            player.exit_hits += 1
+            message = f"Núcleo {player.exit_hits}/{EXIT_HITS}"
+            if player.exit_hits >= EXIT_HITS:
+                player.cleared.add(room.key)
+                self.status, self.winner = "won", self.player
+                message = "Escapou da masmorra!"
+        else:
+            player.cleared.add(room.key)
+            message = "Guardião vencido. Passagem liberada."
+        result = {"correct": correct, "expired": expired, "message": message,
                   "answer": question["answer"], "player": self.player + 1}
-        self.question = None
-        self.player = (self.player + 1) % len(self.scores)
+        if self.status == "won":
+            self.question = None
+        else:
+            self._end_turn()
         return result

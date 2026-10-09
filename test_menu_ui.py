@@ -27,7 +27,7 @@ class MenuTests(unittest.TestCase):
         menu.start_btn.invoke()
         self.app.update()
         game = self.app.screen.game
-        self.assertEqual((game.difficulty, len(game.scores)), (4, 3))
+        self.assertEqual((game.difficulty, len(game.players)), (4, 3))
         self.app.show_setup()
         self.app.update()
         self.assertEqual((self.app.screen.level.get(), self.app.screen.players.get()), (4, 3))

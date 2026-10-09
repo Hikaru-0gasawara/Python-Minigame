@@ -3,7 +3,7 @@
 import unittest
 from types import SimpleNamespace
 
-from dungeon import Expedition
+from dungeon import EXIT_HITS, Expedition
 from dungeon_ui import DungeonApp, ExpeditionScreen, PORTALS, PLAYER_COLORS
 
 
@@ -35,13 +35,24 @@ class DungeonUITests(unittest.TestCase):
         screen.submit()
         self.app.update()
 
+    def win(self, screen):
+        """Put the active racer one Room from the Exit with one hit left, then finish."""
+        g = screen.game
+        exit_key = g.dungeon.exit_key
+        neighbour = next(iter(g.dungeon.connections[exit_key]))
+        g.active.position = neighbour
+        g.active.cleared.add(neighbour)
+        g.active.exit_hits = EXIT_HITS - 1
+        screen.enter([room.key for room in g.exits()].index(exit_key))
+        self.solve(screen)
+
     def test_portals_match_compass_and_missing_doors_are_walls(self):
         screen = self.start_seeded()
         g = screen.game
         # Inspect every room, including branches, junctions and dead ends.
         for room in g.dungeon.rooms.values():
-            g.current = room
-            room.cleared = True
+            g.active.position = room.key
+            g.active.cleared.add(room.key)
             screen.refresh()
             self.app.update()
             for portal, (_, _, (dx, dy)) in enumerate(PORTALS):
@@ -63,10 +74,11 @@ class DungeonUITests(unittest.TestCase):
         screen = self.start_seeded()
         g = screen.game
         initial = g.current.key
-        self.assertEqual(set(screen.map_positions), g.revealed)
-        self.assertEqual(len(screen.map.find_withtag("room")), len(g.revealed))
-        expected = sum(1 for k in g.revealed for n in g.dungeon.connections[k]
-                       if k < n and n in g.revealed and (k in g.visited or n in g.visited))
+        me = g.active
+        self.assertEqual(set(screen.map_positions), me.revealed)
+        self.assertEqual(len(screen.map.find_withtag("room")), len(me.revealed))
+        expected = sum(1 for k in me.revealed for n in g.dungeon.connections[k]
+                       if k < n and n in me.revealed and (k in me.visited or n in me.visited))
         self.assertEqual(len(screen.map.find_withtag("corridor")), expected)
         room = g.exits()[0]
         x, y = screen.map_positions[room.key]
@@ -77,12 +89,22 @@ class DungeonUITests(unittest.TestCase):
         screen.map_click(SimpleNamespace(x=x, y=y))
         self.assertEqual(g.current.key, room.key)  # Cannot flee an active quiz.
         self.solve(screen)
-        score = g.scores[:]
         screen.map_click(SimpleNamespace(x=x, y=y))
         self.assertEqual(g.current.key, initial)
-        self.assertEqual(g.scores, score)
         self.assertIsNone(g.question)
-        self.assertFalse(set(g.dungeon.rooms) == g.revealed)
+        self.assertFalse(set(g.dungeon.rooms) == me.revealed)
+
+    def test_map_shows_only_the_active_players_view_and_every_rival(self):
+        screen = self.start_seeded(players=3)
+        g = screen.game
+        screen.enter(next(i for i, room in enumerate(g.exits()) if len(g.dungeon.connections[room.key]) > 1))
+        self.solve(screen)
+        first = g.players[0]
+        self.assertEqual(g.player, 1)
+        self.assertEqual(set(screen.map_positions), g.players[1].revealed)
+        self.assertNotEqual(first.revealed, g.players[1].revealed)
+        self.assertEqual(len(screen.map.find_withtag("rival")), 2)
+        self.assertIn("PLANTA J2", screen.map_title.cget("text"))
 
     def test_shortcuts_are_removed_and_rebound_when_restarting(self):
         screen = self.start_seeded()
@@ -128,11 +150,10 @@ class DungeonUITests(unittest.TestCase):
         g = screen.game
         screen.enter(next(i for i, room in enumerate(g.exits()) if len(g.dungeon.connections[room.key]) > 1))
         self.solve(screen)
-        self.assertTrue(screen.game.current.cleared)
-        screen.enter(next(i for i, room in enumerate(screen.game.exits()) if not room.cleared))
+        self.assertTrue(g.has_cleared(g.current))
+        screen.enter(next(i for i, room in enumerate(g.exits()) if not g.has_cleared(room)))
         screen.game.question_deadline = screen.game.clock() - 1
         self.pump()
-        self.assertEqual(screen.game.lives, 4)
         self.assertIsNone(screen.game.question)
         screen.resume_at = screen.game.clock() - 1
         self.pump()
@@ -143,15 +164,15 @@ class DungeonUITests(unittest.TestCase):
         self.app.start(3, 1)
         self.pump()
 
-    def test_global_deadline_finishes_ui_once(self):
-        self.app.start(1, 1)
-        screen = self.app.screen
-        screen.game.deadline = screen.game.clock() - 1
+    def test_winning_finishes_ui_once(self):
+        screen = self.start_seeded()
+        self.win(screen)
         self.pump()
         self.assertTrue(screen.finished)
-        self.assertEqual(screen.game.status, "lost")
+        self.assertEqual((screen.game.status, screen.game.winner), ("won", 0))
         self.assertEqual(str(screen.submit_btn.cget("state")), "disabled")
-        self.assertEqual(screen.game.lives, 5)
+        self.assertEqual(str(screen.back_btn.cget("state")), "disabled")
+        self.assertIn("escapou", screen.q_text.cget("text"))
 
     def test_looking_rotates_portals_without_moving_or_erasing_answer(self):
         screen = self.start_seeded()
@@ -190,7 +211,7 @@ class DungeonUITests(unittest.TestCase):
         screen.advance_transition(action["start"] + action["duration"] + .01)
         self.assertEqual(screen.game.current.key, target)
         self.assertIsNotNone(screen.game.question)
-        self.assertEqual(screen.game.history, [origin])
+        self.assertEqual(screen.game.active.came_from, origin)
         self.assertIsNone(screen.transition)
 
     def test_motion_toggle_completes_turn_and_timeout_cancels_movement(self):
@@ -204,20 +225,25 @@ class DungeonUITests(unittest.TestCase):
         screen.advance_transition(action["start"])
         self.assertEqual(screen.facing, 3)
         self.assertIsNone(screen.transition)
-        self.app.effects.set(True)
-        origin = screen.game.current.key
+
+    def test_timeout_that_passes_the_turn_cancels_the_retreat_walk(self):
+        screen = self.start_seeded(players=2)
+        g = screen.game
         screen.enter(0)
-        screen.game.deadline = screen.game.clock() - 1
+        room = g.current.key
+        self.app.effects.set(True)
+        screen.back()
+        self.assertEqual(screen.transition["player"], 0)
+        g.question_deadline = g.clock() - 1
         self.pump()
-        self.assertEqual(screen.game.status, "lost")
-        self.assertEqual(screen.game.current.key, origin)
         self.assertIsNone(screen.transition)
+        self.assertEqual((g.player, g.players[0].position), (1, room))
 
     def test_player_identity_tracks_full_rotation_and_result_author(self):
         screen = self.start_seeded(players=4)
-        screen.enter(0)
         for player in range(4):
             g = screen.game
+            screen.enter(0)
             self.assertEqual(g.player, player)
             card_names = [str(name.cget("text")) for _, name, _ in screen.player_cards]
             self.assertEqual(sum("SUA VEZ" in name for name in card_names), 1)
@@ -229,16 +255,14 @@ class DungeonUITests(unittest.TestCase):
             screen.submit()
             self.assertTrue(screen.feedback.cget("text").startswith(f"J{player+1} ·"))
             self.assertEqual(g.player, (player+1) % 4)
-            g.ask()
             screen.refresh()
         self.assertEqual(screen.game.player, 0)
 
-    def test_correct_answer_awards_previous_player_and_highlights_next(self):
+    def test_correct_answer_credits_the_answerer_and_highlights_next(self):
         screen = self.start_seeded(players=2)
         screen.enter(0)
         self.solve(screen)
-        self.assertGreater(screen.game.scores[0], 0)
-        self.assertEqual(screen.game.scores[1], 0)
+        self.assertIn(screen.game.players[0].position, screen.game.players[0].cleared)
         self.assertIn("J1", screen.feedback.cget("text"))
         self.assertIn("JOGADOR 2", screen.player_badge.itemcget("active_player", "text"))
         self.assertIn("SUA VEZ", screen.player_cards[1][1].cget("text"))
@@ -251,11 +275,12 @@ class DungeonUITests(unittest.TestCase):
         self.pump()
         self.assertEqual(screen.game.player, 1)
         self.assertIn("SUA VEZ", screen.player_cards[1][1].cget("text"))
-        screen.game.deadline = screen.game.clock() - 1
+        self.win(screen)
         self.pump()
         self.assertIsNone(screen._active_player)
         self.assertFalse(any("SUA VEZ" in name.cget("text") for _, name, _ in screen.player_cards))
-        self.assertEqual(screen.player_badge.itemcget("active_player", "text"), "PLACAR DA EQUIPE")
+        self.assertIn("ESCAPOU", screen.player_cards[1][1].cget("text"))
+        self.assertEqual(screen.player_badge.itemcget("active_player", "text"), "JOGADOR 2 VENCEU")
 
 
 if __name__ == "__main__":
