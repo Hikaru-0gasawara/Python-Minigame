@@ -251,12 +251,12 @@ class Expedition:
             self._effect(player, room.effect)
         self._end_turn()
 
-    def _can_leave(self):
+    def can_leave(self):
         # Only a Guardian blocks the way; after a Swap a player may stand anywhere.
         return self.current.kind not in GUARDED or self.has_cleared(self.current)
 
     def enter(self, door):
-        if self.status != "playing" or self.question is not None or not self._can_leave():
+        if self.status != "playing" or self.question is not None or not self.can_leave():
             return False
         exits = self.exits()
         if not isinstance(door, int) or not 0 <= door < len(exits):

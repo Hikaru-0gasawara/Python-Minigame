@@ -26,6 +26,10 @@ _Avoid_: beco, leaf
 The number of rooms between a room and the Entrance along the shortest path.
 _Avoid_: distance, floor, distância, profundidade (on-screen only)
 
+**Sector**:
+A band of Depth with its own look, so players can tell how deep they are: shallow, middle or deep.
+_Avoid_: zone, area, biome, setor (on-screen only)
+
 **Seed**:
 The value from which a Dungeon and everything placed in it is generated; it is shown to players so the same Dungeon can be replayed or shared.
 
@@ -51,9 +55,17 @@ _Avoid_: Explorador, mode, level
 How hard a single Question is: easy, medium or hard. A Difficulty sets how often each Tier appears.
 _Avoid_: difficulty (for questions), level
 
+**ECO**:
+The AI whose mind the Dungeon is. It speaks through its Guardians, and its Questions are tests; escaping through the Exit is escaping ECO.
+_Avoid_: AM, the computer, the system
+
 **Guardian**:
-The keeper of a room, who asks a Question to every player who enters it.
+A statue through which ECO asks a Question to every player who enters its room.
 _Avoid_: monster, enemy, boss
+
+**Taunt**:
+A short line ECO speaks through a Guardian before its Question.
+_Avoid_: flavor text, fala (on-screen only), greeting
 
 **Question**:
 A single quiz prompt posed by a Guardian.
@@ -85,6 +97,10 @@ A held Buff that exchanges the player's position with a chosen opponent's.
 **Debuff**:
 A harmful effect a player suffers during an Expedition.
 _Avoid_: penalty, curse
+
+**Record**:
+One of the five best escape times kept for a Difficulty between Expeditions, with its Seed, player count and date.
+_Avoid_: high score, score, ranking
 
 **Retreat**:
 Being sent back to the Room the player came from.

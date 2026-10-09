@@ -7,8 +7,10 @@ import tkinter as tk
 
 from dungeon import EFFECT_TEXT, EXIT_HITS, LIVES, PENALTIES, Expedition, ROOMS, format_seed
 from menu_ui import Setup
-from room_scene import RoomScene, DOOR_BOUNDS
-from motion import CanvasVeil, smooth, blend
+from motion import smooth, blend
+from pixel_view import PixelView
+from room_art import BEHIND_DOOR
+from scene import COMPASS, portal_targets, relative_portals, scene_for
 
 BG = "#080e12"
 PANEL = "#111e25"
@@ -23,8 +25,6 @@ PLAYER_COLORS = ("#48e5dd", "#f6c777", "#c4a0ff", "#90dfab")
 # Initial portal layout; relative_portals follows the player's current facing.
 PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
            ("L", "LESTE", (1, 0)), ("S", "SUL", (0, 1)))
-COMPASS = (("N", "NORTE", (0, -1)), ("L", "LESTE", (1, 0)),
-           ("S", "SUL", (0, 1)), ("O", "OESTE", (-1, 0)))
 SYMBOLS = {"entrance": "E", "combat": "G", "elite": "!", "treasure": "$", "mimic": "M",
            "trap": "^", "sanctuary": "+", "empty": "·", "exit": "X", "unknown": ""}
 RESULTS_DELAY = 2.0  # Seconds the winning room stays on screen.
@@ -159,8 +159,7 @@ class ExpeditionScreen(tk.Frame):
         self.scene.bind("<Motion>", self.motion)
         self.scene.bind("<Leave>", lambda e: setattr(self, "hover", None))
         self.scene.bind("<Button-1>", self.scene_click)
-        self.renderer = RoomScene(self.scene)
-        self.veil = CanvasVeil(self.scene)
+        self.renderer = PixelView(self.scene)
 
         doors = tk.Frame(main, bg=BG)
         doors.grid(row=2, column=0, sticky="ew", pady=8)
@@ -315,16 +314,11 @@ class ExpeditionScreen(tk.Frame):
                                     else "Caminho livre. A vez passa adiante.", fg=MUTED)
 
     def relative_portals(self, facing=None):
-        direction = self.facing if facing is None else facing
-        return [COMPASS[(direction+offset) % 4] for offset in (-1, 0, 1, 2)]
+        return relative_portals(self.facing if facing is None else facing)
 
     def portal_targets(self, facing=None):
         """Match visible portals to actual adjacent rooms, never to a lane."""
-        g = self.game
-        exits = g.exits()
-        return [next((i for i, room in enumerate(exits)
-                      if room.key == (g.current.x + dx, g.current.y + dy)), None)
-                for _, _, (dx, dy) in self.relative_portals(facing)]
+        return portal_targets(self.game, self.facing if facing is None else facing)
 
     def look(self, turn):
         if self.transition or self.game.status != "playing":
@@ -558,16 +552,17 @@ class ExpeditionScreen(tk.Frame):
         self.map_title.configure(text=f"PLANTA J{g.player+1} / {len(me.visited)} SALAS · SEED {format_seed(g.seed)}")
 
     def door_at(self, event):
-        w, h = max(self.scene.winfo_width(), 1), max(self.scene.winfo_height(), 1)
-        x, y = event.x / w, event.y / h
-        for i, (left, top, right, bottom) in enumerate(self.door_bounds()):
-            if left <= x <= right and top <= y <= bottom and self.portal_targets()[i] is not None:
-                return i
-        return None
+        portal = self.renderer.region_at(event.x, event.y)
+        return portal if portal is not None and self.portal_targets()[portal] is not None else None
 
-    @staticmethod
-    def door_bounds():
-        return DOOR_BOUNDS
+    def door_bounds(self):
+        """Each portal's clickable region as fractions of the scene canvas."""
+        w, h = max(self.scene.winfo_width(), 1), max(self.scene.winfo_height(), 1)
+        bounds = []
+        for x0, y0, x1, y1 in self.renderer.regions:
+            (left, top), (right, bottom) = self.renderer.to_canvas(x0, y0), self.renderer.to_canvas(x1 + 1, y1 + 1)
+            bounds.append((left / w, top / h, right / w, bottom / h))
+        return bounds
 
     def motion(self, event):
         self.hover = self.door_at(event)
@@ -585,57 +580,37 @@ class ExpeditionScreen(tk.Frame):
         def text(x, y, value, color=MUTED, size=10, **kw):
             return c.create_text(x*w, y*h, text=value, fill=color, font=(FONT, size), **kw)
         facing = self.facing
-        opening = None
-        camera = (1.0, 0.0, 0.0)
-        shade = 0.0
+        fade = 0
+        # A dithered fade stands in for the walk until doors and transitions get their own art.
         if self.transition:
             action = self.transition
             progress = min(1.0, max(0.0, (now-action["start"])/action["duration"]))
             if action["type"] == "look":
-                half = progress*2 if progress < .5 else (1-progress)*2
-                shift = smooth(half)*.075
                 facing = action["from"] if progress < .5 else action["to"]
-                # Overscan keeps the room covering the viewport throughout the turn.
-                camera = (1.0 + 2*shift, -action["turn"]*shift if progress < .5 else action["turn"]*shift, 0.0)
-                shade = smooth((half-.45)/.55)
+                fade = min(4, int((1 - abs(progress*2 - 1)) * 5))
             else:
-                opening = (action["portal"], smooth(progress/.46))
-                walk = max(0.0, (progress-.46)/.54)
-                travel = smooth(walk)
-                direction = action["portal"]
-                zoom = 1 + travel*(.75 if direction != 3 else .04)
-                # Steer the vanishing point toward the chosen doorway as we step.
-                shift = (.25 if direction == 0 else -.25 if direction == 2 else 0)*travel
-                camera = (zoom, shift, math.sin(walk*math.pi*2)*.005*math.sin(walk*math.pi))
-                shade = smooth((walk-.50)/.50)
+                fade = min(4, int(max(0., progress - .5) * 10))
         elif self.arrival_at is not None and self.app.effects.get():
-            settle = smooth((now-self.arrival_at)/.20)
-            shade = 1-settle
-            camera = (1+.025*(1-settle), 0., 0.)
+            settle = (now-self.arrival_at)/.20
+            fade = max(0, 4 - int(settle * 5))
             if settle >= 1:
                 self.arrival_at = None
-        exits = g.exits()
-        targets = self.portal_targets(facing)
-        compass = self.relative_portals(facing)
-        portals = []
-        for i, index in enumerate(targets):
-            room = exits[index] if index is not None else None
-            kind = None if room is None else g.appearance(room)
-            portals.append(None if room is None else {
-                "label": ROOMS[kind][0], "compass": compass[i][0],
-                "color": ROOMS[kind][2], "cleared": g.has_cleared(room)})
-        here = g.has_cleared(g.current)
-        self.renderer.draw(room_key=g.current.key, kind=g.current.kind, portals=portals,
-                           facing=COMPASS[facing][1], locked=not here,
-                           opening=opening, camera=camera, now=now,
-                           effects=self.app.effects.get(),
-                           hovered=self.hover if not self.transition else None)
-        if not here and g.status == "playing":
-            color = ROOMS[g.current.kind][2]
-            c.create_rectangle(w*.46,h*.43,w*.54,h*.60,fill="#10252e",outline=color,width=2)
-            text(.5,.51,"?" if g.current.kind != "exit" else str(EXIT_HITS-g.active.exit_hits),color,20)
-        if shade and self.app.effects.get():
-            self.veil.draw(shade)
+        scene = scene_for(g, facing)
+        self.renderer.draw(scene, fade if self.app.effects.get() else 0)
+        def box(x0, y0, x1, y1, **kw):
+            return c.create_rectangle(*self.renderer.to_canvas(x0, y0), *self.renderer.to_canvas(x1 + 1, y1 + 1), **kw)
+        locked = bool(scene.doors) and scene.doors[0].locked
+        top = self.renderer.to_canvas(0, 0)[1]
+        c.create_text(self.renderer.to_canvas(4, 0)[0], top + 10, text=f"OLHANDO {COMPASS[facing][1]}",
+                      fill="#9ccecc", font=(FONT, 9, "bold"), anchor="w")
+        c.create_text(self.renderer.to_canvas(316, 0)[0], top + 10, anchor="e", font=(FONT, 8, "bold"),
+                      text="PORTAS TRAVADAS" if locked else "EXPLORAÇÃO LIVRE", fill="#d69980" if locked else "#becac8")
+        if any(door.portal == 3 for door in scene.doors):
+            box(*BEHIND_DOOR, fill="#10232a", outline="#8ddbd3" if self.hover == 3 and not locked else "#587977")
+            x, y = self.renderer.to_canvas((BEHIND_DOOR[0] + BEHIND_DOOR[2] + 1) / 2, (BEHIND_DOOR[1] + BEHIND_DOOR[3] + 1) / 2)
+            c.create_text(x, y, text=f"↓  {self.relative_portals(facing)[3][0]} · ATRÁS", fill="#b9d4ce", font=(FONT, 9))
+        if self.hover is not None and self.hover != 3 and not locked and not self.transition:
+            box(*self.renderer.regions[self.hover], outline=PLAYER_COLORS[g.player], width=2)
         if self.app.effects.get():
             for x, y, vx, vy, life, color in self.particles:
                 r = max(1, life*3)
