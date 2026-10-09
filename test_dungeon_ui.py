@@ -1,10 +1,9 @@
 """Tk integration checks. Requires an available Tk display."""
 
 import unittest
-import random
 from types import SimpleNamespace
 
-from dungeon import Dungeon
+from dungeon import Expedition
 from dungeon_ui import DungeonApp, ExpeditionScreen, PORTALS, PLAYER_COLORS
 
 
@@ -27,7 +26,7 @@ class DungeonUITests(unittest.TestCase):
         self.app.mainloop()
 
     def start_seeded(self, players=1):
-        self.app.swap(ExpeditionScreen(self.app, Dungeon(players=players, rng=random.Random(42))))
+        self.app.swap(ExpeditionScreen(self.app, Expedition(players=players, seed=42)))
         self.app.update()
         return self.app.screen
 
@@ -40,14 +39,14 @@ class DungeonUITests(unittest.TestCase):
         screen = self.start_seeded()
         g = screen.game
         # Inspect every room, including branches, junctions and dead ends.
-        for room in g.rooms.values():
+        for room in g.dungeon.rooms.values():
             g.current = room
             room.cleared = True
             screen.refresh()
             self.app.update()
             for portal, (_, _, (dx, dy)) in enumerate(PORTALS):
                 target = (room.x + dx, room.y + dy)
-                exists = target in g.connections[room.key]
+                exists = target in g.dungeon.connections[room.key]
                 self.assertEqual(str(screen.door_buttons[portal].cget("state")),
                                  "normal" if exists else "disabled")
                 bounds = screen.door_bounds()[portal]
@@ -66,7 +65,7 @@ class DungeonUITests(unittest.TestCase):
         initial = g.current.key
         self.assertEqual(set(screen.map_positions), g.revealed)
         self.assertEqual(len(screen.map.find_withtag("room")), len(g.revealed))
-        expected = sum(1 for k in g.revealed for n in g.connections[k]
+        expected = sum(1 for k in g.revealed for n in g.dungeon.connections[k]
                        if k < n and n in g.revealed and (k in g.visited or n in g.visited))
         self.assertEqual(len(screen.map.find_withtag("corridor")), expected)
         room = g.exits()[0]
@@ -83,7 +82,7 @@ class DungeonUITests(unittest.TestCase):
         self.assertEqual(g.current.key, initial)
         self.assertEqual(g.scores, score)
         self.assertIsNone(g.question)
-        self.assertFalse(set(g.rooms) == g.revealed)
+        self.assertFalse(set(g.dungeon.rooms) == g.revealed)
 
     def test_shortcuts_are_removed_and_rebound_when_restarting(self):
         screen = self.start_seeded()
@@ -126,7 +125,8 @@ class DungeonUITests(unittest.TestCase):
 
     def test_submission_retry_and_restart_cancel_callbacks(self):
         screen = self.start_seeded()
-        screen.enter(1)
+        g = screen.game
+        screen.enter(next(i for i, room in enumerate(g.exits()) if len(g.dungeon.connections[room.key]) > 1))
         self.solve(screen)
         self.assertTrue(screen.game.current.cleared)
         screen.enter(next(i for i, room in enumerate(screen.game.exits()) if not room.cleared))

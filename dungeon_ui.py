@@ -5,7 +5,7 @@ import random
 import time
 import tkinter as tk
 
-from dungeon import Dungeon, ROOMS
+from dungeon import Expedition, ROOMS, format_seed
 from menu_ui import Setup
 from room_scene import RoomScene, DOOR_BOUNDS
 from motion import CanvasVeil, smooth, blend
@@ -26,7 +26,7 @@ PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
 COMPASS = (("N", "NORTE", (0, -1)), ("L", "LESTE", (1, 0)),
            ("S", "SUL", (0, 1)), ("O", "OESTE", (-1, 0)))
 SYMBOLS = {"entrance": "E", "combat": "?", "treasure": "+", "elite": "!",
-           "sanctuary": "V", "clock": "T", "boss": "X"}
+           "sanctuary": "V", "clock": "T", "exit": "X"}
 
 
 def label(parent, text="", size=11, color=TEXT, **kwargs):
@@ -62,8 +62,8 @@ class DungeonApp(tk.Tk):
     def show_setup(self):
         self.swap(Setup(self))
 
-    def start(self, difficulty, players):
-        self.swap(ExpeditionScreen(self, Dungeon(difficulty, players)))
+    def start(self, difficulty, players, seed=None):
+        self.swap(ExpeditionScreen(self, Expedition(difficulty, players, seed)))
 
 
 
@@ -437,12 +437,12 @@ class ExpeditionScreen(tk.Frame):
         self.map_positions = positions
         radius = self.map_radius = max(2, min(8, step*.26))
         for key, (x, y) in positions.items():
-            for target in g.connections[key]:
+            for target in g.dungeon.connections[key]:
                 if target in positions and key < target and (key in g.visited or target in g.visited):
                     tx, ty = positions[target]
                     c.create_line(x, y, tx, ty, fill="#34535c", width=3, tags="corridor")
         for key, (x, y) in positions.items():
-            room = g.rooms[key]
+            room = g.dungeon.rooms[key]
             current = key == g.current.key
             color = TEAL if current else ROOMS[room.kind][2]
             if current:
@@ -454,7 +454,7 @@ class ExpeditionScreen(tk.Frame):
                 c.create_text(x, y, text=("↑", "→", "↓", "←")[self.facing] if current else SYMBOLS[room.kind],
                               fill=BG if room.cleared or current else color, font=(FONT, 8, "bold"))
         c.create_text(w-8, 10, text="N ↑", anchor="ne", fill=MUTED, font=(FONT, 8))
-        self.map_title.configure(text=f"PLANTA / {len(g.visited)} SALAS VISITADAS")
+        self.map_title.configure(text=f"PLANTA / {len(g.visited)} SALAS · SEED {format_seed(g.seed)}")
 
     def door_at(self, event):
         w, h = max(self.scene.winfo_width(), 1), max(self.scene.winfo_height(), 1)
@@ -530,7 +530,7 @@ class ExpeditionScreen(tk.Frame):
         if not g.current.cleared and g.status == "playing":
             color = ROOMS[g.current.kind][2]
             c.create_rectangle(w*.46,h*.43,w*.54,h*.60,fill="#10252e",outline=color,width=2)
-            text(.5,.51,"?" if g.current.kind != "boss" else str(3-g.current.hits),color,20)
+            text(.5,.51,"?" if g.current.kind != "exit" else str(3-g.current.hits),color,20)
         if shade and self.app.effects.get():
             self.veil.draw(shade)
         if self.app.effects.get():
@@ -582,7 +582,7 @@ class ExpeditionScreen(tk.Frame):
         meta = (f"JOGADOR {g.player+1} · SUA VEZ  /  {math.ceil(qleft)}s PARA RESPONDER" if g.question else
                 f"JOGADOR {g.player+1} · ESCOLHA SUA ROTA" if g.current.cleared else
                 f"JOGADOR {g.player+1} · PRÓXIMA RESPOSTA") if g.status == "playing" else "RESULTADO DA EQUIPE"
-        if g.current.kind == "boss" and g.status == "playing":
+        if g.current.kind == "exit" and g.status == "playing":
             meta += f"  /  NÚCLEO {g.current.hits}/3"
         self.q_meta.configure(text=meta, fg=RED if g.question and qleft<5 else PLAYER_COLORS[g.player] if g.status == "playing" else MUTED)
         self.q_bar.delete("all")

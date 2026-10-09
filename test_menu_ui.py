@@ -32,12 +32,29 @@ class MenuTests(unittest.TestCase):
         self.app.update()
         self.assertEqual((self.app.screen.level.get(), self.app.screen.players.get()), (4, 3))
 
+    def test_typed_seed_starts_that_dungeon_and_is_shown(self):
+        menu = self.app.screen
+        self.assertEqual([b.cget("text").split("\n")[0][3:] for b in menu.mode_buttons],
+                         ["Aventureiro", "Guerreiro", "Pesadelo", "Campanha"])
+        menu.seed.set("3f9a-12c0")
+        menu.start_btn.invoke()
+        self.app.update()
+        screen = self.app.screen
+        self.assertEqual(screen.game.seed, 0x3F9A12C0)
+        self.assertIn("SEED 3F9A-12C0", screen.map_title.cget("text"))
+        self.app.show_setup()
+        self.app.update()
+        self.app.screen.seed.set("not a seed")
+        self.app.screen.start_btn.invoke()
+        self.app.update()
+        self.assertIsInstance(self.app.screen.game.seed, int)
+
     def test_controls_remain_visible_at_minimum_window(self):
         menu = self.app.screen
         for mode in menu.mode_buttons:
             mode.invoke()
             self.app.update()
-            for widget in (menu.start_btn, menu.effects_toggle,
+            for widget in (menu.start_btn, menu.effects_toggle, menu.seed_entry,
                            *menu.mode_buttons, *menu.player_buttons):
                 with self.subTest(widget=str(widget), mode=menu.level.get()):
                     self.assertTrue(widget.winfo_ismapped())

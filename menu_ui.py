@@ -5,7 +5,7 @@ from pathlib import Path
 import time
 import tkinter as tk
 
-from dungeon import MODES
+from dungeon import MODES, parse_seed
 
 
 BG = "#071015"
@@ -122,6 +122,15 @@ class Setup(tk.Frame):
             self.player_buttons.append(btn)
         self.player_description = _label(form, "", 9, MUTED, anchor="w")
         self.player_description.pack(fill="x", pady=(5, 4))
+        seed_row = tk.Frame(form, bg=PANEL)
+        seed_row.pack(fill="x", pady=(0, 4))
+        _label(seed_row, "SEED (OPCIONAL)", 9, MUTED).pack(side="left")
+        self.seed = tk.StringVar(self)
+        self.seed_entry = tk.Entry(seed_row, textvariable=self.seed, width=11, bg=BG, fg=TEXT,
+                                   insertbackground=TEXT, relief="flat", font=(FONT, 10),
+                                   highlightthickness=1, highlightbackground=LINE, highlightcolor=TEAL)
+        self.seed_entry.pack(side="left", padx=(10, 0), ipady=3)
+        _label(seed_row, "vazio = aleatória", 8, MUTED).pack(side="left", padx=8)
         self.effects_toggle = tk.Checkbutton(
             form, text="Animações ambientes", variable=app.effects,
             bg=PANEL, fg=MUTED, activebackground=PANEL, activeforeground=TEXT,
@@ -173,8 +182,8 @@ class Setup(tk.Frame):
                           highlightbackground=TEAL if selected else LINE,
                           text=f"{'●' if selected else '○'}  {name}\n{MODE_COPY[i][1]}")
         self.mode_description.configure(text=MODE_COPY[value][2])
-        _name, size, duration, question = MODES[value]
-        values = (f"{duration//60}:{duration%60:02}", "30 → 15s" if value == 4 else f"{question}s", str(3*(size-1)+2))
+        _name, rooms, duration, question = MODES[value]
+        values = (f"{duration//60}:{duration%60:02}", "30 → 15s" if value == 4 else f"{question}s", str(rooms))
         for widget, text in zip(self.stat_values, values):
             widget.configure(text=text)
 
@@ -190,7 +199,7 @@ class Setup(tk.Frame):
     def _start(self):
         self.app.menu_difficulty = self.level.get()
         self.app.menu_players = self.players.get()
-        self.app.start(self.level.get(), self.players.get())
+        self.app.start(self.level.get(), self.players.get(), parse_seed(self.seed.get()))
 
     def _queue_redraw(self, _event=None):
         if self._dead:

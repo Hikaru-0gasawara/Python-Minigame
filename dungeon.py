@@ -8,19 +8,22 @@ from dungeon_map import CARDINAL_DIRECTIONS, generate_layout
 from questions import TIERS, QuestionBank, is_correct
 
 
+EASY, MEDIUM, HARD, CAMPAIGN = 1, 2, 3, 4
+# Difficulty: on-screen name, Rooms, expedition seconds, seconds per Question.
 MODES = {
-    1: ("Explorador", 9, 240, 30),
-    2: ("Aventureiro", 12, 190, 22),
-    3: ("Pesadelo", 15, 145, 15),
-    4: ("Campanha", 18, 300, 30),
+    EASY: ("Aventureiro", 15, 240, 30),
+    MEDIUM: ("Guerreiro", 22, 190, 22),
+    HARD: ("Pesadelo", 30, 145, 15),
+    CAMPAIGN: ("Campanha", 30, 300, 30),
 }
+SEED_SPACE = 16 ** 8
 ROOMS = {
     "combat": ("Terminal", "Desafio de quiz", "#24e5dd", 1.0),
     "treasure": ("Cache", "Pontos ×1,5", "#f3c66b", 1.5),
     "elite": ("Sobrecarga", "Pontos ×2 · tempo −25%", "#f57888", 2.0),
     "sanctuary": ("Recuperação", "+1 vida ao acertar", "#86e4b4", 1.0),
     "clock": ("Sincronizador", "+12s ao acertar", "#b49aff", 1.0),
-    "boss": ("Núcleo", "3 acertos para vencer", "#f57888", 3.0),
+    "exit": ("Núcleo", "3 acertos para vencer", "#f57888", 3.0),
     "entrance": ("Entrada", "Escolha sua primeira porta", "#66cde5", 1.0),
 }
 
@@ -39,35 +42,70 @@ class Room:
         return self.x, self.y
 
 
+@dataclass
 class Dungeon:
-    """Connected rooms occupy a grid with actual north/east/south/west doors.
+    """The generated place: Rooms on an orthogonal grid joined by passages."""
+
+    seed: int
+    connections: dict
+    rooms: dict
+    exit_key: tuple
+    entrance_key: tuple = (0, 0)
+
+
+def random_seed():
+    return random.randrange(SEED_SPACE)
+
+
+def format_seed(seed):
+    text = f"{seed:08X}"
+    return f"{text[:4]}-{text[4:]}"
+
+
+def parse_seed(text):
+    """Return the Seed typed by a player, or None when it is not one."""
+    digits = text.replace("-", "").replace(" ", "")
+    if not 1 <= len(digits) <= 8 or not all(c in "0123456789abcdefABCDEF" for c in digits):
+        return None
+    return int(digits, 16)
+
+
+def generate_dungeon(seed, difficulty):
+    """The same Seed and Difficulty always produce the same Dungeon."""
+    rng = random.Random(seed)
+    connections, depths, exit_key = generate_layout(rng, MODES[difficulty][1])
+    rooms = {}
+    for x, y in connections:
+        kind = rng.choice(list(ROOMS)[:5])
+        if (x, y) == (0, 0):
+            kind = "entrance"
+        elif (x, y) == exit_key:
+            kind = "exit"
+        rooms[x, y] = Room(x, y, kind, depths[x, y], cleared=kind == "entrance")
+    return Dungeon(seed, connections, rooms, exit_key)
+
+
+class Expedition:
+    """One game in a Dungeon whose Rooms have north/east/south/west doors.
 
     The entire expedition shares a clock and lives. In local cooperative play,
     each submitted answer rotates the active player and scores individually.
     """
 
-    def __init__(self, difficulty=1, players=1, rng=None, clock=time.monotonic):
+    def __init__(self, difficulty=EASY, players=1, seed=None, clock=time.monotonic):
         if difficulty not in MODES or not 1 <= players <= 4:
             raise ValueError("Invalid difficulty or player count")
         self.difficulty = difficulty
-        self.name, size, budget, self.base_question_time = MODES[difficulty]
-        self.rng = rng or random.Random()
+        self.name, _rooms, budget, self.base_question_time = MODES[difficulty]
+        self.seed = random_seed() if seed is None else seed
+        self.dungeon = generate_dungeon(self.seed, difficulty)
+        # Questions use their own stream so play never alters the Dungeon.
+        self.rng = random.Random(f"questions:{self.seed}")
         self.clock = clock
         self.deadline = clock() + budget
         self.budget = budget
         self.bank = QuestionBank()
-        self.room_count = 3 * (size - 1) + 2
-        self.connections, depths, self.boss_key = generate_layout(self.rng, self.room_count)
-        self.floors = depths[self.boss_key]
-        self.rooms = {}
-        for x, y in self.connections:
-            kind = self.rng.choice(list(ROOMS)[:5])
-            if (x, y) == (0, 0):
-                kind = "entrance"
-            elif (x, y) == self.boss_key:
-                kind = "boss"
-            self.rooms[x, y] = Room(x, y, kind, depths[x, y], cleared=kind == "entrance")
-        self.current = self.rooms[0, 0]
+        self.current = self.dungeon.rooms[0, 0]
         self.history = []
         self.visited = {self.current.key}
         self.revealed = {self.current.key}
@@ -100,8 +138,8 @@ class Dungeon:
     def exits(self):
         """Existing doors in compass order, including already visited rooms."""
         x, y = self.current.key
-        return [self.rooms[x + dx, y + dy] for dx, dy in CARDINAL_DIRECTIONS
-                if (x + dx, y + dy) in self.connections[self.current.key]]
+        return [self.dungeon.rooms[x + dx, y + dy] for dx, dy in CARDINAL_DIRECTIONS
+                if (x + dx, y + dy) in self.dungeon.connections[self.current.key]]
 
     def reveal(self):
         self.revealed.update(room.key for room in self.exits())
@@ -122,17 +160,17 @@ class Dungeon:
     def back(self):
         if self.status != "playing" or self.remaining <= 0 or not self.current.cleared or not self.history:
             return False
-        self.current = self.rooms[self.history.pop()]
+        self.current = self.dungeon.rooms[self.history.pop()]
         self.reveal()
         return True
 
     def ask(self):
         if self.status != "playing" or self.remaining <= 0 or self.current.cleared or self.question is not None:
             return
-        tier = min(2, self.current.depth * 3 // self.floors)
-        self.question = self.bank.draw(TIERS[tier if self.difficulty == 4 else self.difficulty - 1], self.rng)
+        tier = min(2, self.current.depth * 3 // self.dungeon.rooms[self.dungeon.exit_key].depth)
+        self.question = self.bank.draw(TIERS[tier if self.difficulty == CAMPAIGN else self.difficulty - 1], self.rng)
         duration = self.base_question_time
-        if self.difficulty == 4:
+        if self.difficulty == CAMPAIGN:
             duration = (30, 22, 15)[tier]
         if self.current.kind == "elite":
             duration *= .75
@@ -167,7 +205,7 @@ class Dungeon:
             points = int((1000 + speed) * multiplier * ROOMS[self.current.kind][3])
             self.scores[self.player] += points
             self.current.hits += 1
-            self.current.cleared = self.current.kind != "boss" or self.current.hits >= 3
+            self.current.cleared = self.current.kind != "exit" or self.current.hits >= 3
             reward = ""
             if self.current.cleared:
                 if self.current.kind == "clock":
@@ -177,7 +215,7 @@ class Dungeon:
                     self.lives = min(5, self.lives + 1)
                     reward = " · vida restaurada"
             message = f"+{points:,} pontos · combo {self.combo}{reward}"
-            if self.current.kind == "boss" and self.current.cleared:
+            if self.current.kind == "exit" and self.current.cleared:
                 self.finish("won")
         else:
             self.lives -= 1

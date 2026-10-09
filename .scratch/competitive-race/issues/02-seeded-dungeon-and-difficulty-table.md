@@ -4,12 +4,12 @@
 
 **Blocked by:** 01 (both rework the same modules).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The menu shows Aventureiro, Guerreiro, Pesadelo and Campanha, and an optional Seed field
-- [ ] An empty or invalid Seed starts a random Seed; a valid one starts exactly that Dungeon
-- [ ] The current Seed is visible on screen during the Expedition
-- [ ] Same Seed + Difficulty yields an identical Dungeon (layout, Depths, Exit, Room kinds)
-- [ ] Room counts are 15 / 22 / 30 / 30 for Easy / Medium / Hard / Campaign
-- [ ] Generation invariants hold across many Seeds and every Difficulty: connected, reciprocal orthogonal passages, at least one loop, at least one Dead End, Exit at maximum Depth with one passage
-- [ ] Code identifiers use the glossary (Difficulty Easy/Medium/Hard/Campaign, Depth, Exit, Entrance)
+- [x] The menu shows Aventureiro, Guerreiro, Pesadelo and Campanha, and an optional Seed field
+- [x] An empty or invalid Seed starts a random Seed; a valid one starts exactly that Dungeon
+- [x] The current Seed is visible on screen during the Expedition
+- [x] Same Seed + Difficulty yields an identical Dungeon (layout, Depths, Exit, Room kinds)
+- [x] Room counts are 15 / 22 / 30 / 30 for Easy / Medium / Hard / Campaign
+- [x] Generation invariants hold across many Seeds and every Difficulty: connected, reciprocal orthogonal passages, at least one loop, at least one Dead End, Exit at maximum Depth with one passage
+- [x] Code identifiers use the glossary (Difficulty Easy/Medium/Hard/Campaign, Depth, Exit, Entrance)

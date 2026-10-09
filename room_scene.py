@@ -95,7 +95,7 @@ class RoomScene:
         rng = random.Random(zlib.crc32(repr((room_key, kind)).encode("utf-8")))
         self._material = []
         # Muted mineral colors retain physical texture beneath colored lighting.
-        base = {"elite": "#51504e", "boss": "#514a50", "sanctuary": "#4b5752",
+        base = {"elite": "#51504e", "exit": "#514a50", "sanctuary": "#4b5752",
                 "treasure": "#575347"}.get(kind, "#4b5556")
         self._tile_surface(rng, [(0, 0), (.30, .20), (.30, .70), (0, 1)], 5, 4,
                            _color(base, .79))
@@ -241,7 +241,7 @@ class RoomScene:
                 self._poly([(x-.014, y), (x+.014, y),
                             (x+.014, y+.021), (x-.014, y+.021)], "#506763")
         self._line([(0, .965), (.30, .695), (.70, .695), (1, .965)], "#151f22", 8)
-        accent = {"elite": "#d99466", "boss": "#bf92c4", "sanctuary": "#83cba9",
+        accent = {"elite": "#d99466", "exit": "#bf92c4", "sanctuary": "#83cba9",
                   "treasure": "#e0c27d"}.get(kind, "#6bbdbb")
         pulse = .93 + .07*math.sin(now*1.5) if effects else 1.
         # Physical ceiling girders and luminous recessed strip housings.

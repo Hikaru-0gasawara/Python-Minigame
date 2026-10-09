@@ -1,17 +1,16 @@
 """Deterministic checks for timing, graph traversal, scoring and game endings."""
 
-import random
 import unittest
 from collections import deque
 
-from dungeon import Dungeon, MODES
+from dungeon import CAMPAIGN, MODES, Expedition, format_seed, generate_dungeon, parse_seed
 from dungeon_map import CARDINAL_DIRECTIONS, distances
 
 
 class DungeonTests(unittest.TestCase):
     def make_game(self, difficulty=1, players=1):
         self.now = 100.0
-        return Dungeon(difficulty, players, random.Random(42), lambda: self.now)
+        return Expedition(difficulty, players, 42, lambda: self.now)
 
     def solve(self, game):
         return game.submit(game.question["answer"])
@@ -23,7 +22,7 @@ class DungeonTests(unittest.TestCase):
             key, path = queue.popleft()
             if key == target:
                 return path
-            for neighbor in sorted(game.connections[key]):
+            for neighbor in sorted(game.dungeon.connections[key]):
                 if neighbor not in visited:
                     visited.add(neighbor)
                     queue.append((neighbor, path + [neighbor]))
@@ -40,64 +39,83 @@ class DungeonTests(unittest.TestCase):
         for mode in MODES:
             for seed in range(100):
                 with self.subTest(mode=mode, seed=seed):
-                    g = Dungeon(mode, rng=random.Random(seed))
+                    g = Expedition(mode, seed=seed)
                     self.assertEqual(g.current.key, (0, 0))
-                    self.assertEqual(len(g.rooms), g.room_count)
+                    self.assertEqual(len(g.dungeon.rooms), MODES[mode][1])
                     self.assertGreaterEqual(len(g.exits()), 2)
-                    measured = distances(g.connections)
-                    self.assertEqual(set(measured), set(g.rooms))
-                    self.assertEqual({key: room.depth for key, room in g.rooms.items()}, measured)
-                    self.assertEqual(g.floors, measured[g.boss_key])
-                    self.assertGreaterEqual(g.floors, 4)
-                    self.assertEqual(len(g.connections[g.boss_key]), 1)
-                    self.assertEqual(sum(r.kind == "boss" for r in g.rooms.values()), 1)
-                    self.assertTrue(any(len(edges) >= 3 for edges in g.connections.values()))
-                    self.assertTrue(any(len(edges) == 1 and key != g.boss_key
-                                        for key, edges in g.connections.items()))
+                    measured = distances(g.dungeon.connections)
+                    self.assertEqual(set(measured), set(g.dungeon.rooms))
+                    self.assertEqual({key: room.depth for key, room in g.dungeon.rooms.items()}, measured)
+                    self.assertEqual(measured[g.dungeon.exit_key], max(measured.values()))
+                    self.assertGreaterEqual(measured[g.dungeon.exit_key], 4)
+                    self.assertEqual(len(g.dungeon.connections[g.dungeon.exit_key]), 1)
+                    self.assertEqual(sum(r.kind == "exit" for r in g.dungeon.rooms.values()), 1)
+                    self.assertTrue(any(len(edges) >= 3 for edges in g.dungeon.connections.values()))
+                    self.assertTrue(any(len(edges) == 1 and key != g.dungeon.exit_key
+                                        for key, edges in g.dungeon.connections.items()))
                     # A connected graph with at least V edges contains a cycle.
-                    self.assertGreaterEqual(sum(map(len, g.connections.values())) // 2, len(g.rooms))
-                    for key, edges in g.connections.items():
+                    self.assertGreaterEqual(sum(map(len, g.dungeon.connections.values())) // 2, len(g.dungeon.rooms))
+                    for key, edges in g.dungeon.connections.items():
                         self.assertNotIn(key, edges)
                         self.assertLessEqual(len(edges), 4)
                         for adjacent in edges:
-                            self.assertIn(key, g.connections[adjacent])
+                            self.assertIn(key, g.dungeon.connections[adjacent])
                             self.assertEqual(sum(abs(a - b) for a, b in zip(key, adjacent)), 1)
-                    without_boss = {key: edges - {g.boss_key} for key, edges in g.connections.items()
-                                    if key != g.boss_key}
-                    self.assertEqual(len(distances(without_boss)), len(g.rooms) - 1)
+                    without_boss = {key: edges - {g.dungeon.exit_key} for key, edges in g.dungeon.connections.items()
+                                    if key != g.dungeon.exit_key}
+                    self.assertEqual(len(distances(without_boss)), len(g.dungeon.rooms) - 1)
 
     def test_seed_reproduces_layout_types_and_questions(self):
         first = self.make_game()
         second = self.make_game()
-        self.assertEqual(first.connections, second.connections)
-        self.assertEqual(first.rooms, second.rooms)
+        self.assertEqual(first.dungeon.connections, second.dungeon.connections)
+        self.assertEqual(first.dungeon.rooms, second.dungeon.rooms)
         first.enter(0)
         second.enter(0)
         self.assertEqual(first.question, second.question)
-        other = Dungeon(rng=random.Random(43))
-        self.assertNotEqual(first.connections, other.connections)
+        other = Expedition(seed=43)
+        self.assertNotEqual(first.dungeon.connections, other.dungeon.connections)
+
+    def test_dungeon_depends_only_on_seed_and_difficulty(self):
+        played = self.make_game()
+        self.walk(played, [played.exits()[0].key])
+        fresh = generate_dungeon(42, 1)
+        self.assertEqual(played.dungeon.connections, fresh.connections)
+        self.assertEqual({k: (r.kind, r.depth) for k, r in played.dungeon.rooms.items()},
+                         {k: (r.kind, r.depth) for k, r in fresh.rooms.items()})
+        self.assertEqual(fresh.exit_key, played.dungeon.exit_key)
+        self.assertNotEqual(generate_dungeon(42, 1).connections, generate_dungeon(42, 3).connections)
+
+    def test_seed_text_round_trips_and_rejects_garbage(self):
+        for seed in (0, 42, 0xDEADBEEF, 16 ** 8 - 1):
+            self.assertEqual(parse_seed(format_seed(seed)), seed)
+        self.assertEqual(format_seed(0x3F9A12C0), "3F9A-12C0")
+        self.assertEqual(parse_seed(" 3f9a 12c0 "), 0x3F9A12C0)
+        for bad in ("", "-", "XYZ", "123456789", "+1", "0x10"):
+            self.assertIsNone(parse_seed(bad))
+        self.assertIsInstance(Expedition().seed, int)
 
     def test_compass_order_and_invalid_doors(self):
         g = self.make_game()
-        for room in g.rooms.values():
+        for room in g.dungeon.rooms.values():
             g.current = room
             expected = [(room.x + dx, room.y + dy) for dx, dy in CARDINAL_DIRECTIONS
-                        if (room.x + dx, room.y + dy) in g.connections[room.key]]
+                        if (room.x + dx, room.y + dy) in g.dungeon.connections[room.key]]
             self.assertEqual([r.key for r in g.exits()], expected)
-        g.current = g.rooms[0, 0]
+        g.current = g.dungeon.rooms[0, 0]
         for invalid in (-1, len(g.exits()), 100, None, "0"):
             self.assertFalse(g.enter(invalid))
             self.assertEqual(g.current.key, (0, 0))
 
     def test_fog_reveals_only_room_neighbors_and_back_tracks_history(self):
         g = self.make_game()
-        self.assertEqual(g.revealed, {(0, 0)} | g.connections[0, 0])
+        self.assertEqual(g.revealed, {(0, 0)} | g.dungeon.connections[0, 0])
         self.assertEqual(g.visited, {(0, 0)})
         previous_reveal = g.revealed.copy()
         g.enter(0)
         first = g.current.key
         self.assertEqual(g.visited, {(0, 0), first})
-        self.assertEqual(g.revealed, previous_reveal | g.connections[first])
+        self.assertEqual(g.revealed, previous_reveal | g.dungeon.connections[first])
         self.solve(g)
         origin_door = [r.key for r in g.exits()].index((0, 0))
         self.assertTrue(g.enter(origin_door))
@@ -113,8 +131,8 @@ class DungeonTests(unittest.TestCase):
 
         def visit():
             origin = g.current.key
-            for key in sorted(g.connections[origin]):
-                if key == g.boss_key or key in g.visited:
+            for key in sorted(g.dungeon.connections[origin]):
+                if key == g.dungeon.exit_key or key in g.visited:
                     continue
                 self.walk(g, [key])
                 visit()
@@ -122,7 +140,7 @@ class DungeonTests(unittest.TestCase):
                 self.assertEqual(g.current.key, origin)
 
         visit()
-        self.assertEqual(g.visited, set(g.rooms) - {g.boss_key})
+        self.assertEqual(g.visited, set(g.dungeon.rooms) - {g.dungeon.exit_key})
         self.assertEqual(g.status, "playing")
         self.assertEqual(g.current.key, (0, 0))
 
@@ -209,10 +227,11 @@ class DungeonTests(unittest.TestCase):
         self.assertEqual(g.combo, 1)
 
     def test_campaign_difficulty_and_time_progress(self):
-        g = self.make_game(4)
-        for depth, seconds, tier in ((1, 30, "easy"), ((g.floors + 2) // 3, 22, "medium"),
-                                    ((2 * g.floors + 2) // 3, 15, "hard")):
-            g.current = next(room for room in g.rooms.values() if room.depth == depth)
+        g = self.make_game(CAMPAIGN)
+        floors = g.dungeon.rooms[g.dungeon.exit_key].depth
+        for depth, seconds, tier in ((1, 30, "easy"), ((floors + 2) // 3, 22, "medium"),
+                                    ((2 * floors + 2) // 3, 15, "hard")):
+            g.current = next(room for room in g.dungeon.rooms.values() if room.depth == depth)
             g.current.kind = "combat"
             g.question = None
             g.ask()
@@ -221,7 +240,7 @@ class DungeonTests(unittest.TestCase):
 
     def test_guardian_needs_three_hits_and_freezes_final_time(self):
         g = self.make_game()
-        self.walk(g, self.path_to(g, g.boss_key))
+        self.walk(g, self.path_to(g, g.dungeon.exit_key))
         self.assertEqual(g.current.hits, 1)
         self.assertEqual(g.status, "playing")
         for _ in range(2):
