@@ -28,6 +28,7 @@ COMPASS = (("N", "NORTE", (0, -1)), ("L", "LESTE", (1, 0)),
 SYMBOLS = {"entrance": "E", "combat": "G", "elite": "!", "treasure": "$", "mimic": "M",
            "trap": "^", "sanctuary": "+", "empty": "·", "exit": "X", "unknown": ""}
 TIER_NAMES = {"easy": "FÁCIL", "medium": "MÉDIA", "hard": "DIFÍCIL"}
+POWER_NAMES = {"ward": "◆ ESCUDO", "hex": "◆ MALDIÇÃO", "swap": "◆ TROCA"}
 
 
 def hearts(player):
@@ -184,6 +185,17 @@ class ExpeditionScreen(tk.Frame):
             self.player_cards.append((card, name, status))
         self.back_btn = button(side, "↶ Recuar pelo trajeto", self.back)
         self.back_btn.pack(fill="x", pady=4)
+        power = tk.Frame(side, bg=PANEL)
+        power.pack(fill="x", pady=(2, 4))
+        self.power_label = label(power, "", 9, MUTED, anchor="w")
+        self.power_label.grid(row=0, column=0, columnspan=4, sticky="ew")
+        self.target_buttons = []
+        for i in range(len(game.players)):
+            power.columnconfigure(i, weight=1, uniform="target")
+            btn = button(power, f"J{i+1}", lambda t=i: self.use_buff(t))
+            btn.configure(font=(FONT, 9, "bold"), fg=PLAYER_COLORS[i], padx=4, pady=3)
+            btn.grid(row=1, column=i, sticky="ew", padx=(0, 4), pady=(3, 0))
+            self.target_buttons.append(btn)
         tk.Checkbutton(side, text="Efeitos animados", variable=app.effects,
                        bg=PANEL, fg=MUTED, selectcolor=BG,
                        activebackground=PANEL, activeforeground=TEXT).pack(anchor="w", pady=5)
@@ -257,9 +269,9 @@ class ExpeditionScreen(tk.Frame):
         """Say what the last move did: a Buff, a Debuff, a Guardian or nothing."""
         g, event = self.game, self.game.event
         if event:
-            good = event["effect"] in ("haste", "insight", "heal")
+            good = event["effect"] in ("haste", "insight", "heal", "ward", "hex", "swap")
             color = PLAYER_COLORS[event["player"]-1] if good else RED
-            self.feedback.configure(text=f"J{event['player']} · {event['text'].capitalize()}", fg=color)
+            self.feedback.configure(text=f"J{event['player']} · {event['text'][:1].upper()}{event['text'][1:]}", fg=color)
             self.popups.append([event["text"].upper(), .5, .42, 1.6, color])
         else:
             self.feedback.configure(text=ROOMS[g.current.kind][1] if g.question
@@ -333,6 +345,11 @@ class ExpeditionScreen(tk.Frame):
         else:
             self._arrive(target, back=True)
 
+    def use_buff(self, target):
+        if not self.transition and self.game.use_buff(target):
+            self.announce()
+            self.refresh()
+
     def submit(self):
         if not self.game.question:
             return
@@ -376,6 +393,14 @@ class ExpeditionScreen(tk.Frame):
                           fg=ROOMS[kind][2] if room else MUTED,
                           state="normal" if ready and room else "disabled")
         self.back_btn.configure(state="normal" if playing and g.active.came_from and not self.transition else "disabled")
+        held = g.active.held if playing else None
+        aimed = held in ("hex", "swap")
+        self.power_label.configure(text=f"J{g.player+1}: {POWER_NAMES[held]} · " +
+                                   ("USAR EM:" if aimed else "anula a próxima penalidade")
+                                   if held else "Sem poder guardado")
+        for i, btn in enumerate(self.target_buttons):
+            usable = aimed and i != g.player and g.question is None and not self.transition
+            btn.configure(state="normal" if usable else "disabled")
         for btn in self.look_buttons:
             btn.configure(state="normal" if playing and not self.transition else "disabled")
         self.answer.configure(state="normal" if g.question and playing else "disabled")
@@ -413,7 +438,7 @@ class ExpeditionScreen(tk.Frame):
             self._active_player = active
             self.turn_changed_at = now
         color = PLAYER_COLORS[g.player if playing else g.winner]
-        state = (active, tuple((p.position, p.exit_hits, p.lives, p.skip_next) for p in g.players), g.status)
+        state = (active, tuple((p.position, p.exit_hits, p.lives, p.skip_next, p.held) for p in g.players), g.status)
         if state != self._player_state:
             self._player_state = state
             self.challenge.configure(highlightbackground=color)
@@ -429,7 +454,9 @@ class ExpeditionScreen(tk.Frame):
                 name.configure(text=f"J{i+1} {hearts(player)}  {tag}", bg=card.cget("bg"),
                                fg=PLAYER_COLORS[i] if selected or i == g.winner else MUTED)
                 status.configure(text=f"PROF. {g.dungeon.rooms[player.position].depth}"
-                                 f"  ·  X {player.exit_hits}/{EXIT_HITS}", bg=card.cget("bg"))
+                                 f"  ·  X {player.exit_hits}/{EXIT_HITS}\n"
+                                 f"{POWER_NAMES.get(player.held, '· sem poder')}", bg=card.cget("bg"),
+                                 justify="left")
         c = self.player_badge
         c.delete("all")
         c.create_rectangle(0, 0, 231, 45, fill="#12232b", outline="#294048")
@@ -600,14 +627,18 @@ class ExpeditionScreen(tk.Frame):
         self.advance_transition(now)
         if self.resume_at and now >= self.resume_at:
             self.resume_at = 0
+        if not self.resume_at and not self.transition and self.game.question is None:
+            # Whoever stands before an un-Cleared Guardian faces it once results are read.
             self.game.ask()
-            self.refresh()
+            if self.game.question is not None:
+                self.refresh()
         g = self.game
         self.stats.configure(text=f"J{g.player+1} {hearts(g.active)}  /  {g.name.upper()}" if g.status == "playing"
                              else g.name.upper())
         self.update_players(now)
         qleft = g.question_remaining if g.question else 0
-        miss = EFFECT_TEXT[PENALTIES[g.question_tier]].upper() if g.question else ""
+        miss = ("ESCUDO ANULA" if g.active.held == "ward" else
+                EFFECT_TEXT[PENALTIES[g.question_tier]].upper()) if g.question else ""
         meta = (f"JOGADOR {g.player+1}  /  {TIER_NAMES.get(g.question_tier)} · ERRO: {miss}  /  "
                 f"{math.ceil(qleft)}s" if g.question else
                 f"JOGADOR {g.player+1} · ESCOLHA SUA ROTA" if g.has_cleared(g.current) else

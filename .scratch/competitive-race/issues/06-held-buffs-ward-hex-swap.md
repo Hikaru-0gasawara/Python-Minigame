@@ -9,12 +9,12 @@ The screen offers a target choice for Hex and Swap, listing only opponents.
 
 **Blocked by:** 05.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Held Buffs are limited to one per player; a new one replaces the old
-- [ ] Every player's held Buff is visible and fits the minimum window with four players
-- [ ] Ward cancels exactly one wrong-answer penalty and nothing else
-- [ ] Hex skips the chosen opponent's next Turn; Swap exchanges positions without touching Room states
-- [ ] Hex and Swap cannot target the user; target choice is offered on screen
-- [ ] Using a Buff outside your Turn, or without holding one, is rejected without side effects
-- [ ] Covered by Expedition rules tests and screen tests
+- [x] Held Buffs are limited to one per player; a new one replaces the old
+- [x] Every player's held Buff is visible and fits the minimum window with four players
+- [x] Ward cancels exactly one wrong-answer penalty and nothing else
+- [x] Hex skips the chosen opponent's next Turn; Swap exchanges positions without touching Room states
+- [x] Hex and Swap cannot target the user; target choice is offered on screen
+- [x] Using a Buff outside your Turn, or without holding one, is rejected without side effects
+- [x] Covered by Expedition rules tests and screen tests

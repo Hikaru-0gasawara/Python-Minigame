@@ -277,6 +277,36 @@ class DungeonUITests(unittest.TestCase):
         self.assertIn("J1 · −1 vida", screen.feedback.cget("text"))
         self.assertIn("MÍMICO", screen.room_title.cget("text"))
 
+    def test_held_buffs_show_on_cards_and_targets_are_opponents_only(self):
+        screen = self.start_seeded(players=3)
+        g = screen.game
+        self.assertIn("sem poder", screen.player_cards[0][2].cget("text"))
+        self.assertTrue(all(str(b.cget("state")) == "disabled" for b in screen.target_buttons))
+        g.players[0].held, g.players[2].held = "swap", "ward"
+        screen.refresh()
+        self.assertIn("TROCA", screen.player_cards[0][2].cget("text"))
+        self.assertIn("ESCUDO", screen.player_cards[2][2].cget("text"))
+        self.assertEqual([str(b.cget("state")) for b in screen.target_buttons], ["disabled", "normal", "normal"])
+        target = g.players[2].position = g.exits()[0].key
+        screen.target_buttons[2].invoke()
+        self.assertEqual(g.players[0].position, target)
+        self.assertIn("J1 · Trocou de lugar com J3", screen.feedback.cget("text"))
+
+    def test_a_player_left_before_a_guardian_is_asked_at_the_start_of_their_turn(self):
+        screen = self.start_seeded(players=2)
+        g = screen.game
+        screen.enter(0)
+        g.question_tier = "easy"
+        screen.answer.insert(0, "definitely wrong")
+        screen.submit()
+        screen.resume_at = 0
+        neighbour = g.exits()[0]
+        g.active.cleared.add(neighbour.key)
+        screen.enter(0)  # Player 2 walks into a Room already Cleared: no result to wait for.
+        self.assertEqual((g.player, g.question), (0, None))
+        self.pump()
+        self.assertIsNotNone(g.question)
+
     def test_tier_lives_and_penalties_are_shown(self):
         screen = self.start_seeded(players=2)
         g = screen.game

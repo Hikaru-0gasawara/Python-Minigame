@@ -345,6 +345,76 @@ class DungeonTests(unittest.TestCase):
         self.assertLessEqual(within, g.players[0].revealed)
         self.assertFalse(within <= g.players[1].revealed)
 
+    def test_a_player_holds_one_buff_and_a_new_one_replaces_it(self):
+        g = self.make_game()
+        door = self.plant(g, "treasure", "ward")
+        g.enter(door)
+        self.assertEqual(g.active.held, "ward")
+        g.dungeon.rooms[g.exits()[0].key].kind = "combat"
+        g.retreat()
+        other = next(i for i, room in enumerate(g.exits()) if i != door)
+        g.exits()[other].kind, g.exits()[other].effect = "treasure", "hex"
+        g.enter(other)
+        self.assertEqual(g.active.held, "hex")
+
+    def test_ward_cancels_exactly_one_wrong_answer_penalty(self):
+        g = self.make_game()
+        g.active.held = "ward"
+        g.enter(0)
+        room = g.current.key
+        result = self.miss(g, "hard")
+        self.assertEqual(result["penalty"], "warded")
+        self.assertIn("escudo", result["message"])
+        self.assertEqual((g.active.position, g.active.lives, g.active.held), (room, LIVES, None))
+        g.ask()
+        self.miss(g, "easy")
+        self.assertEqual(g.active.lives, LIVES - 1)
+
+    def test_ward_does_not_protect_against_traps(self):
+        g = self.make_game()
+        g.active.held = "ward"
+        g.enter(self.plant(g, "trap", "life"))
+        self.assertEqual((g.active.lives, g.active.held), (LIVES - 1, "ward"))
+
+    def test_hex_makes_the_chosen_opponent_lose_their_next_turn(self):
+        g = self.make_game(players=3)
+        g.active.held = "hex"
+        self.assertTrue(g.use_buff(1))
+        self.assertEqual((g.player, g.active.held), (0, None))  # Using a Buff is free.
+        self.assertEqual(g.event["text"], "maldição: J2 perde a próxima vez")
+        g.enter(0)
+        self.solve(g)
+        self.assertEqual(g.player, 2)
+        self.assertFalse(g.players[1].skip_next)
+
+    def test_swap_exchanges_positions_without_touching_room_states(self):
+        g = self.make_game(players=2)
+        g.enter(self.branching_door(g))
+        self.solve(g)
+        mine = g.players[0].position
+        cleared = [set(p.cleared) for p in g.players]
+        visited = [set(p.visited) for p in g.players]
+        g.players[1].held = "swap"
+        self.assertTrue(g.use_buff(0))
+        self.assertEqual((g.players[0].position, g.players[1].position), ((0, 0), mine))
+        self.assertEqual([p.cleared for p in g.players], cleared)
+        self.assertEqual([p.visited for p in g.players], visited)
+        self.assertEqual([p.came_from for p in g.players], [None, None])
+        self.assertIn(mine, g.players[1].revealed)
+        self.assertIsNotNone(g.question)  # Player 2 now stands before a Guardian.
+
+    def test_buffs_are_only_spent_by_the_active_holder_on_an_opponent(self):
+        g = self.make_game(players=2)
+        self.assertFalse(g.use_buff(1))  # Nothing held.
+        g.active.held = "ward"
+        self.assertFalse(g.use_buff(1))  # Ward works by itself.
+        g.active.held = "hex"
+        for target in (0, -1, 2, None, "1"):
+            self.assertFalse(g.use_buff(target))
+        g.enter(0)
+        self.assertFalse(g.use_buff(1))  # Not while a Question is open.
+        self.assertEqual((g.active.held, g.players[1].skip_next), ("hex", False))
+
     def test_tier_frequencies_follow_each_difficulty(self):
         for difficulty, (_name, _rooms, seconds, weights) in MODES.items():
             g = self.make_game(difficulty)

@@ -21,12 +21,15 @@ EXIT_HITS = 3
 LIVES = 3
 # A missed easy Question hurts most: the penalty shrinks as the Tier rises.
 PENALTIES = {"easy": "life", "medium": "skip", "hard": "retreat"}
-BUFFS = ("haste", "insight")
+BUFFS = ("haste", "insight", "ward", "hex", "swap")
+HELD = ("ward", "hex", "swap")  # Kept until used; a new one replaces the old.
 DEBUFFS = ("retreat", "skip", "life")
 EFFECT_TEXT = {"life": "−1 vida", "entrance": "sem vidas, de volta à entrada",
                "skip": "perde a próxima vez", "retreat": "recua uma sala",
                "heal": "+1 vida", "haste": "pressa: mais um movimento",
-               "insight": "visão: salas a até 2 passos reveladas"}
+               "insight": "visão: salas a até 2 passos reveladas",
+               "ward": "escudo guardado", "hex": "maldição guardada", "swap": "troca guardada",
+               "warded": "o escudo anulou a penalidade"}
 GUARDED = {"combat", "elite", "exit"}
 # Room kind: on-screen name, hint, colour, generation weight.
 ROOMS = {
@@ -40,7 +43,7 @@ ROOMS = {
     "exit": ("Núcleo", f"{EXIT_HITS} acertos para escapar", "#f57888", 0),
     "entrance": ("Entrada", "Ponto de partida", "#66cde5", 0),
     # What an unvisited Room looks like: only its silhouette.
-    "unknown": ("Desconhecida", "O que há além?", "#5f7380", 0),
+    "unknown": ("Desconhecida", "O que há além?", "#b4c6cf", 0),
 }
 PLACED = [kind for kind, (*_, weight) in ROOMS.items() if weight]
 
@@ -82,6 +85,7 @@ class Player:
     lives: int = LIVES
     skip_next: bool = False
     extra_moves: int = 0
+    held: str = None
 
 
 def random_seed():
@@ -216,6 +220,8 @@ class Expedition:
             player.lives = min(LIVES, player.lives + 1)
         elif effect == "haste":
             player.extra_moves += 1
+        elif effect in HELD:
+            player.held = effect
         elif effect == "insight":
             ring = {player.position}
             for _ in range(2):
@@ -245,8 +251,12 @@ class Expedition:
             self._effect(player, room.effect)
         self._end_turn()
 
+    def _can_leave(self):
+        # Only a Guardian blocks the way; after a Swap a player may stand anywhere.
+        return self.current.kind not in GUARDED or self.has_cleared(self.current)
+
     def enter(self, door):
-        if self.status != "playing" or self.question is not None or not self.has_cleared(self.current):
+        if self.status != "playing" or self.question is not None or not self._can_leave():
             return False
         exits = self.exits()
         if not isinstance(door, int) or not 0 <= door < len(exits):
@@ -262,8 +272,32 @@ class Expedition:
         self._move(self.active.came_from)
         return True
 
+    def use_buff(self, target):
+        """Spend a held Hex or Swap on an opponent; it does not use up the Turn."""
+        player = self.active
+        if (self.status != "playing" or self.question is not None or player.held not in ("hex", "swap")
+                or not isinstance(target, int) or not 0 <= target < len(self.players) or target == self.player):
+            return False
+        rival = self.players[target]
+        if player.held == "hex":
+            rival.skip_next = True
+            text = f"maldição: J{target+1} perde a próxima vez"
+        else:
+            player.position, rival.position = rival.position, player.position
+            for racer in (player, rival):
+                # Visited and Cleared stay as they were; each racer just sees where they now stand.
+                racer.came_from = None
+                racer.revealed.add(racer.position)
+                racer.revealed.update(self.dungeon.connections[racer.position])
+            text = f"trocou de lugar com J{target+1}"
+        self.ask()  # Before recording the event: asking clears the last one.
+        self.event = {"player": self.player + 1, "effect": player.held, "text": text}
+        player.held = None
+        return True
+
     def ask(self):
-        if self.status != "playing" or self.question is not None or self.has_cleared(self.current):
+        if (self.status != "playing" or self.question is not None
+                or self.current.kind not in GUARDED or self.has_cleared(self.current)):
             return
         self.event = None
         self.question_tier = ("hard" if self.current.kind == "elite"
@@ -285,7 +319,10 @@ class Expedition:
         correct = not expired and is_correct(question, answer)
         penalty = None
         if not correct:
-            penalty = self._apply(player, PENALTIES[self.question_tier])
+            if player.held == "ward":
+                player.held, penalty = None, "warded"
+            else:
+                penalty = self._apply(player, PENALTIES[self.question_tier])
             reason = "Tempo da pergunta esgotado" if expired else "Resposta incorreta"
             message = f"{reason}. Resposta: {question['answer']} · {EFFECT_TEXT[penalty]}"
         elif room.kind == "exit":
