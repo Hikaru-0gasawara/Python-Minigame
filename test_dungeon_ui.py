@@ -8,8 +8,11 @@ from types import SimpleNamespace
 import font
 import hud
 from dungeon import EXIT_HITS, Expedition
+from scene import sector_of
 from test_dungeon import make_combat
-from dungeon_ui import ALT_MASK, DungeonApp, ExpeditionScreen, PORTALS, PLAYER_COLORS, ResultsScreen
+from dungeon_ui import (ALT_MASK, ARRIVE, OPEN, STEP, TURN_FADE, WALK, DungeonApp, ExpeditionScreen, PORTALS,
+                        PLAYER_COLORS, ResultsScreen)
+from room_art import DOOR_STEPS
 
 
 class DungeonUITests(unittest.TestCase):
@@ -320,6 +323,111 @@ class DungeonUITests(unittest.TestCase):
         self.pump()
         self.assertIsNone(screen.transition)
         self.assertEqual((g.player, g.players[0].position), (1, room))
+
+    def walk_in(self, screen, portal=None):
+        """Start walking through a door that leads on; return the transition."""
+        self.app.effects.set(True)
+        door = screen.portal_targets()[portal] if portal is not None else next(
+            t for p, t in enumerate(screen.portal_targets()) if t is not None and p != 3)
+        screen.enter(door)
+        return screen.transition
+
+    def test_walk_opens_the_door_then_zooms_in_steps_and_fades(self):
+        screen = self.start_seeded()
+        action = self.walk_in(screen)
+        start, portal = action["start"], action["portal"]
+        steps = []
+        for t in (0, OPEN / 3, OPEN * 2 / 3, OPEN - .001):
+            screen.draw_scene(start + t)
+            self.assertIsNone(screen.presented["zoom"])
+            steps.append(screen.presented["opening"][1])
+        self.assertEqual(steps, sorted(steps))
+        self.assertEqual((steps[0], screen.presented["opening"][0]), (0, portal))
+        zooms = screen.renderer.zoom_steps()
+        self.assertEqual(zooms, [3, 4, 5, 6, 8, 10])
+        x0, y0, x1, y1 = screen.renderer.regions[portal]
+        for k, zoom in enumerate(zooms):
+            screen.draw_scene(start + OPEN + k * STEP + .001)
+            self.assertEqual(screen.presented["opening"], (portal, DOOR_STEPS))
+            self.assertEqual(screen.presented["zoom"], zoom)
+            self.assertEqual(screen.presented["fade"], max(0, min(4, k - 1)))
+            self.assertEqual(screen.presented["centre"], ((x0 + x1) // 2, (y0 + y1) // 2))
+        self.assertAlmostEqual(action["duration"], WALK)
+
+    def test_arrival_shows_the_walkers_room_dark_then_lit_before_the_turn_passes(self):
+        screen = self.start_seeded(players=2)
+        g = screen.game
+        action = self.walk_in(screen)
+        g.active.cleared.add(action["target"])         # an already-Cleared room ends the Turn at once
+        screen.advance_transition(action["start"] + WALK + .01)
+        self.assertEqual(g.player, 1)
+        arrived = screen.arrival_at
+        screen.draw_scene(arrived + .01)
+        self.assertEqual((screen.presented["viewer"], screen.presented["lights"]), (0, "off"))
+        self.assertEqual((screen.presented["zoom"], screen.presented["fade"]), (4, 4))
+        self.assertEqual(screen._scene.room_key, action["target"])
+        screen.draw_scene(arrived + .45)
+        self.assertEqual((screen.presented["lights"], screen.presented["fade"]), ("dimmed", 0))
+        self.assertIsNone(screen.region_centre(("look", 1)) and screen.look(1) and None)
+        self.assertEqual(screen.facing, 0)                  # nobody turns while the walker arrives
+        screen.draw_scene(arrived + ARRIVE + .01)
+        self.assertIsNone(screen.arrival_at)
+        self.assertEqual(screen.presented["viewer"], 1)
+        self.assertEqual(screen.presented["fade"], 4)       # then a quick fade to the next player's room
+        screen.draw_scene(arrived + ARRIVE + TURN_FADE + .02)
+        self.assertEqual(screen.presented["fade"], 0)
+
+    def test_a_booting_guardian_wakes_only_after_the_lights(self):
+        screen = self.start_seeded()
+        action = self.walk_in(screen)
+        screen.advance_transition(action["start"] + WALK + .01)
+        self.assertIsNotNone(screen.game.question)
+        screen.draw_scene(screen.arrival_at + .3)
+        self.assertEqual(screen.presented["guardian"], "dormant")
+        screen.draw_scene(screen.arrival_at + .58)
+        self.assertEqual(screen.presented["guardian"], "listening")
+
+    def test_looking_pans_from_one_facing_to_the_next(self):
+        screen = self.start_seeded()
+        self.app.effects.set(True)
+        screen.look(1)
+        action = screen.transition
+        offsets = []
+        for t in (.05, .2, .4):
+            screen.draw_scene(action["start"] + t)
+            offset, turn = screen.presented["pan"]
+            self.assertEqual((turn, offset % 16), (1, 0))
+            offsets.append(offset)
+        self.assertEqual(offsets, sorted(offsets))
+        screen.advance_transition(action["start"] + action["duration"] + .01)
+        self.assertEqual(screen.facing, 1)
+
+    def test_the_next_room_is_built_while_the_door_opens(self):
+        screen = self.start_seeded()
+        action = self.walk_in(screen)
+        g = screen.game
+        room = g.dungeon.rooms[action["target"]]
+        key = (g.seed, room.key, sector_of(g.dungeon, room))
+        self.assertIn(key, screen.renderer._jobs)
+        for _ in range(400):                                   # a frame's worth of painting at a time
+            if key in screen.renderer._ready:
+                break
+            screen.renderer.work()
+        self.assertIn(key, screen.renderer._ready)
+        self.assertNotIn(key, screen.renderer._jobs)
+
+    def test_reduced_motion_cuts_every_transition(self):
+        screen = self.start_seeded(players=2)
+        g = screen.game
+        screen.enter(0)
+        self.assertIsNone(screen.transition)
+        self.assertIsNone(screen.arrival_at)
+        self.assertEqual({k: screen.presented[k] for k in ("zoom", "fade", "opening", "pan")},
+                         {"zoom": None, "fade": 0, "opening": None, "pan": None})
+        screen.look(1)
+        self.assertEqual((screen.facing, screen.presented["pan"]), (1, None))
+        self.miss(screen)
+        self.assertEqual((g.player, screen.presented["fade"]), (1, 0))
 
     def test_ambient_particles_live_only_with_effects_and_in_their_room(self):
         screen = self.start_seeded()

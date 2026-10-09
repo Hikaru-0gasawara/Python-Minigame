@@ -1,5 +1,6 @@
 """Animated, dependency-free Tkinter dungeon crawler."""
 
+from dataclasses import replace
 import math
 import random
 import sys
@@ -14,7 +15,8 @@ from menu_ui import Setup
 from motion import smooth
 from palette import hex_color
 from pixel_view import PixelView
-from scene import portal_targets, relative_portals, scene_for
+from room_art import DOOR_STEPS, H, W
+from scene import portal_targets, relative_portals, scene_for, sector_of
 
 BG = "#080e12"
 PANEL = "#111e25"
@@ -31,6 +33,11 @@ ALT_MASK = 0x20000 if sys.platform == "win32" else 0x8
 PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
            ("L", "LESTE", (1, 0)), ("S", "SUL", (0, 1)))
 RESULTS_DELAY = 2.0  # Seconds the winning room stays on screen.
+OPEN, STEP = .30, .07          # a walk: the door opens, then each zoom step into the doorway
+WALK = OPEN + 6 * STEP
+ARRIVE, TURN_FADE = .6, .25
+# An arrival's tubes: (seconds since arriving, lights) - dark, a stutter, then on.
+ARRIVAL_LIGHTS = ((.25, "off"), (.32, "on"), (.40, "off"), (.50, "dimmed"), (math.inf, "on"))
 
 
 def label(parent, text="", size=11, color=TEXT, **kwargs):
@@ -124,7 +131,8 @@ class ExpeditionScreen(tk.Frame):
         self.finished = False
         self.finished_at = None
         self.transition = None
-        self.arrival_at = None
+        self.arrival_at, self.arrival_player = None, 0
+        self.presented = {}
         self._active_player = None
         self.turn_changed_at = 0
         self.typed = ""
@@ -176,17 +184,27 @@ class ExpeditionScreen(tk.Frame):
 
     # ---------------------------------------------------------------- actions
 
+    def busy(self):
+        """A walk, a look or an arrival is still on screen; movement waits for it."""
+        return self.transition is not None or self.arrival_at is not None
+
+    def _walk(self, target, back):
+        """Start walking towards a neighbouring room; its background is built meanwhile."""
+        g = self.game
+        index = [room.key for room in g.exits()].index(target)
+        self.transition = {"type": "move", "start": time.monotonic(), "duration": WALK, "target": target,
+                           "player": g.player, "portal": self.portal_targets().index(index), "back": back}
+        self.renderer.prepare(g.seed, target, sector_of(g.dungeon, g.dungeon.rooms[target]))
+
     def enter(self, door):
         g = self.game
-        if self.transition or g.status != "playing" or g.question or not g.can_leave():
+        if self.busy() or g.status != "playing" or g.question or not g.can_leave():
             return
         exits = g.exits()
         if not isinstance(door, int) or not 0 <= door < len(exits):
             return
         if self.app.effects.get():
-            self.transition = {"type": "move", "start": time.monotonic(), "duration": .72,
-                               "target": exits[door].key, "player": g.player,
-                               "portal": self.portal_targets().index(door), "back": False}
+            self._walk(exits[door].key, back=False)
             self.say("Abrindo passagem…", hud.PLAYER_INK[g.player])
             self.refresh()
         else:
@@ -194,9 +212,11 @@ class ExpeditionScreen(tk.Frame):
 
     def _arrive(self, target, back=False):
         exits = [room.key for room in self.game.exits()]
+        mover = self.game.player
         moved = self.game.retreat() if back else self.game.enter(exits.index(target)) if target in exits else False
         if moved:
-            self.arrival_at = time.monotonic() if self.app.effects.get() else None
+            if self.app.effects.get():
+                self.arrival_at, self.arrival_player = time.monotonic(), mover
             self.resume_at = 0
             self.announce()
             self.refresh()
@@ -223,7 +243,7 @@ class ExpeditionScreen(tk.Frame):
         return portal_targets(self.game, self.facing if facing is None else facing)
 
     def look(self, turn):
-        if self.transition or self.game.status != "playing":
+        if self.busy() or self.game.status != "playing":
             return "break"
         target = (self.facing + turn) % 4
         if self.app.effects.get():
@@ -260,19 +280,17 @@ class ExpeditionScreen(tk.Frame):
 
     def back(self):
         g = self.game
-        if self.transition or g.active.came_from is None or g.status != "playing":
+        if self.busy() or g.active.came_from is None or g.status != "playing":
             return
         target = g.active.came_from
         if self.app.effects.get():
-            index = [room.key for room in g.exits()].index(target)
-            self.transition = {"type": "move", "start": time.monotonic(), "duration": .72, "player": g.player,
-                               "target": target, "portal": self.portal_targets().index(index), "back": True}
+            self._walk(target, back=True)
             self.refresh()
         else:
             self._arrive(target, back=True)
 
     def use_buff(self, target):
-        if not self.transition and self.game.use_buff(target):
+        if not self.busy() and self.game.use_buff(target):
             self.announce()
             self.refresh()
 
@@ -446,29 +464,53 @@ class ExpeditionScreen(tk.Frame):
         g = self.game
         effects = self.app.effects.get()
         playing = g.status == "playing"
-        facing, fade = self.facing, 0
-        # A dithered fade stands in for the walk until doors and transitions get their own art.
-        if self.transition:
-            action = self.transition
-            progress = min(1.0, max(0.0, (now - action["start"]) / action["duration"]))
-            if action["type"] == "look":
-                facing = action["from"] if progress < .5 else action["to"]
-                fade = min(4, int((1 - abs(progress * 2 - 1)) * 5))
-            else:
-                fade = min(4, int(max(0., progress - .5) * 10))
-        elif self.arrival_at is not None and effects:
-            settle = (now - self.arrival_at) / .20
-            fade = max(0, 4 - int(settle * 5))
-            if settle >= 1:
-                self.arrival_at = None
         view = self.renderer
+        if self.arrival_at is not None and (not effects or now - self.arrival_at >= ARRIVE):
+            self.arrival_at = None
+            if self.arrival_player != g.player:
+                self.turn_changed_at = now   # only now fade over to whoever plays next
+        viewer, facing = g.player, self.facing
+        opening = pan = zoom = lights = None
+        centre, fade, booting = (W // 2, H // 2), 0, False
+        action = self.transition if effects else None
+        if action and action["type"] == "look":
+            pan = (min(W, int((now - action["start"]) / action["duration"] * W) // 16 * 16), action["turn"])
+        elif action and action["portal"] == 3:
+            fade = min(4, max(0, int((now - action["start"]) / action["duration"] * 5)))  # nothing to zoom into behind
+        elif action:
+            elapsed = now - action["start"]
+            opening = (action["portal"], min(DOOR_STEPS, max(0, int(elapsed / OPEN * DOOR_STEPS))))
+            step = int((elapsed - OPEN) / STEP) if elapsed >= OPEN else -1
+            if step >= 0:
+                steps = view.zoom_steps()
+                zoom, fade = steps[min(step, len(steps) - 1)], max(0, min(4, step - 1))
+                x0, y0, x1, y1 = view.regions[action["portal"]]
+                centre = ((x0 + x1) // 2, (y0 + y1) // 2)
+        elif self.arrival_at is not None:
+            # The walker's new room arrives dark and one step in, then its tubes stutter on.
+            age = max(0., now - self.arrival_at)
+            viewer, facing = self.arrival_player, self.facings[self.arrival_player]
+            zoom = view.zoom_steps()[min(1, len(view.zoom_steps()) - 1)] if age < .15 else None
+            fade = max(0, 4 - int(age / .05))
+            lights = next(state for until, state in ARRIVAL_LIGHTS if age < until)
+            booting = age < .55
+        elif effects and now - self.turn_changed_at < TURN_FADE:
+            fade = max(0, 4 - int((now - self.turn_changed_at) / TURN_FADE * 5))
         self.canvas.delete("all")
-        scene = scene_for(g, facing)
-        if self._scene is None or (scene.room_key, g.player) != (self._scene.room_key, self._scene_player):
+        scene = scene_for(g, facing, viewer)
+        if booting and scene.guardian in ("dormant", "listening"):
+            scene = replace(scene, guardian="dormant")
+        if self._scene is None or (scene.room_key, viewer) != (self._scene.room_key, self._scene_player):
             self.particles.clear()       # particles belong to the room they were born in
-        self._scene, self._scene_player = scene, g.player
-        lights = "dimmed" if effects and scene.flicker and now < self._flicker_until else "on"
-        view.compose(scene, fade if effects else 0, lights, effects and now < self._glitch_until)
+        self._scene, self._scene_player = scene, viewer
+        lights = lights or ("dimmed" if effects and scene.flicker and now < self._flicker_until else "on")
+        glitch = effects and now < self._glitch_until
+        view.compose(scene, lights, glitch, opening)
+        if pan:
+            view.compose(scene_for(g, action["to"], viewer), lights, glitch, target=view.other)
+        self.presented = {"viewer": viewer, "opening": opening, "zoom": zoom, "centre": centre, "fade": fade,
+                          "pan": pan, "lights": lights, "guardian": scene.guardian}
+        view.clear_hud()
         can_retreat = playing and g.active.came_from is not None and not self.transition
         players = tuple((p.position, p.exit_hits, p.lives, p.skip_next, p.held) for p in g.players)
         self.regions = []
@@ -524,7 +566,7 @@ class ExpeditionScreen(tk.Frame):
             ending = [("MASMORRA CONQUISTADA", hud.GOLD), (f"JOGADOR {g.winner + 1} ESCAPOU", hud.PLAYER_INK[g.winner]),
                       (f"SEED {format_seed(g.seed)} · {len(winner.visited)} SALAS", hud.MUTED)]
             self._put("finished", tuple(ending), lambda: hud.banner(ending, 60, hud.GOLD))
-        view.present()
+        view.present(zoom, centre, fade, pan)
         self.hud = {"badge": badge.texts, "map": mini.texts, "cards": cards.texts, "box": [t for t, _ in lines],
                     "tab": self.tab_rect is not None}
 
@@ -568,6 +610,7 @@ class ExpeditionScreen(tk.Frame):
             if self.game.question is not None:
                 self.refresh()
         self.update_players(now)
+        self.renderer.work()
         if self.app.effects.get() and self._scene is not None:
             self.ambience(now)
         else:

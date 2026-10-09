@@ -43,6 +43,16 @@ def build_background(seed, room_key, sector):
 
     Cached: a rematch on the same Seed reuses its rooms. Callers must not modify the buffers.
     """
+    steps = paint_background(seed, room_key, sector)
+    while True:
+        try:
+            next(steps)
+        except StopIteration as done:
+            return done.value
+
+
+def paint_background(seed, room_key, sector):
+    """build_background in slices: a generator that yields every few rows and returns the buffers."""
     s = SECTORS[sector]
     rng = random.Random(f"{seed}:{room_key}")
     puddles = [(rng.uniform(-120, 120), rng.uniform(20, 220), rng.uniform(12, 30))
@@ -99,6 +109,8 @@ def build_background(seed, room_key, sector):
             elif surf in ("left", "right") and v < -86 and extra is None:
                 on[k] = dither(ramp, value + .25, x, y)   # tube glow on the wall tops
                 dimmed[k] = on[k] if surf == "left" else base
+        if y % 8 == 7:
+            yield
     # Panel seams, with a lighter bevel just below them when the lights are on.
     for y in range(H - 1, 0, -1):
         for x in range(W - 1, 0, -1):
@@ -108,6 +120,8 @@ def build_background(seed, room_key, sector):
                 off[k] = 0
             elif y > 1 and tiles[k - W] != tiles[k - 2 * W] and on[k] < 10:
                 on[k] += 1
+        if y % 50 == 0:
+            yield
     for surf, a, b in cracks:                        # cracks as short random walks
         x = int(BX0 + 10 + a * 100) if surf == "back" else int(8 + a * 70) if surf == "left" else int(W - 8 - a * 70)
         y = int(60 + b * 60)
@@ -120,12 +134,78 @@ def build_background(seed, room_key, sector):
     return {"on": on, "dimmed": dimmed, "off": off}
 
 
-def side_door(sector, side, locked):
-    """A closed blast door on a side wall, drawn in the wall's perspective."""
-    wall = SECTORS[sector]["wall"]
+DOOR_STYLES = {"shallow": "blast", "middle": "shutter", "deep": "vault"}
+DOOR_STEPS = 8               # frames from closed (0) to fully open
+
+
+def _leaf(style, a, b, t, x, y, sector):
+    """The door's colour at (a, b) across its opening (0..1 each) when `t` open, or None where open."""
+    key = ("leaf", sector)
+    if style == "blast":                       # two leaves slide apart
+        if a < .5 - .5 * t:
+            lx = a + .5 * t
+        elif a > .5 + .5 * t:
+            lx = a - .5 * t
+        else:
+            return None
+        if b > .85:
+            return 16 if int(lx * 40 + b * 30) % 2 else 0
+        if .48 < lx < .52:
+            return 0
+        if h32(key, int(lx * 8), int(b * 10)) < .12:
+            return RUST[1 + (BAYER[y & 3][x & 3] > 7)]
+        return dither((2, 3, 4, 5, 6), .55 + (int(lx * 20) % 3 == 0) * .2 - b * .2 - (lx > .5) * .1, x, y)
+    if style == "shutter":                     # a rusted shutter rolls up
+        if b >= 1 - t:
+            return None
+        if 1 - t - b < .05:
+            return 16 if int(a * 20) % 2 else 0
+        slat = ((b + t) * 22) % 1
+        rust = h32(key, int(a * 6), int((b + t) * 22)) < .25
+        return dither((1, 12, 13, 14, 15) if rust else (1, 2, 3, 4, 5),
+                      .4 + .3 * (slat < .25) - .25 * (slat > .8) - abs(a - .5) * .3, x, y)
+    slide = max(0., (t - .3) / .7)              # vault: bolts retract, then the slab slides away
+    la = a - slide
+    if la < 0 or slide >= 1:
+        return None
+    if t < .3 and (la < .04 or la > .96) and int(b * 6) % 2:
+        return 9                               # bolts still holding
+    ring = ((la - .5) / .3) ** 2 + ((b - .45) / .2) ** 2
+    if .7 < ring < 1:
+        return dither((3, 4, 5, 6, 7), .6 - b * .3, x, y)
+    angle = math.atan2(b - .45, la - .5) - t * math.tau
+    if ring < .7 and abs(math.sin(angle * 2)) < .18:
+        return 6                               # the wheel's spokes turn as it unlocks
+    if int(la * 12) % 6 == 0 and int(b * 14) % 4 == 0:
+        return 23                              # rivets
+    return dither((0, 1, 2, 3, 4), .55 - abs(la - .5) * .5 - b * .25, x, y)
+
+
+def _corridor(a, b, x, y):
+    """The dark corridor behind an open door, a cold light at its far end."""
+    glow = abs(a - .5) * 1.6 + abs(b - .45) * 1.2
+    if abs(a - .5) < .05 and abs(b - .45) < .04:
+        return 29
+    if glow < .25:
+        return dither((0, 1, 26, 27), .9 - glow * 3, x, y)
+    return dither((0, 1, 2), (b - .7) * 2, x, y) if b > .7 else 0
+
+
+def _side_box(side):
+    """Native pixels that can hold a side door, so drawing never scans the whole frame."""
+    near, far = 1 / (1 + SIDE_DOOR_U[0] / 160), 1 / (1 + SIDE_DOOR_U[1] / 160)
+    x0, x1 = int(CX - NEAR_X * near) - 1, int(CX - NEAR_X * far) + 2
+    if side == "right":
+        x0, x1 = W - x1, W - x0
+    return range(max(0, x0), min(W, x1)), range(int(CY + SIDE_DOOR_V[0] * near) - 1, int(CY + SIDE_DOOR_V[1] * near) + 2)
+
+
+def side_door(sector, side, locked, step=0):
+    """A door on a side wall in the wall's perspective, `step` frames into opening."""
+    wall, style, t = SECTORS[sector]["wall"], DOOR_STYLES[sector], step / DOOR_STEPS
     p = Pix(W, H)
-    columns = range(W // 2) if side == "left" else range(W // 2, W)
-    for y in range(H):
+    columns, rows = _side_box(side)
+    for y in rows:
         for x in columns:
             surf, sc, u, v = _project(x, y)
             if surf != side or not (SIDE_DOOR_U[0] < u < SIDE_DOOR_U[1] and SIDE_DOOR_V[0] < v < SIDE_DOOR_V[1]):
@@ -135,43 +215,31 @@ def side_door(sector, side, locked):
                 c = dither(wall, .3 + (dv < 8) * .1, x, y)
             elif du < 9 or du > 71 or dv < 11:
                 c = 0
-            elif dv > 140:
-                c = 16 if int((du + dv) // 7) % 2 else 0          # hazard stripes
             else:
-                c = dither(METAL, .5 + .25 * (int(du) % 9 < 2) - abs(du - 40) / 160, x, y)
-                if h32("door", sector, int(du) // 6, int(dv) // 9) < .12:
-                    c = RUST[1 + (BAYER[y & 3][x & 3] > 7)]       # rust patches on the leaves
-                if abs(du - 40) < 1.2 / sc * 1.4:
-                    c = 0
+                a, b = (du - 9) / 62, (dv - 11) / 149
+                c = _leaf(style, a, b, t, x, y, sector)
+                if c is None:
+                    c = _corridor(a, b, x, y)
             if 34 < du < 46 and -55 < v < -45:
                 c = RED if locked else CYAN  # lock lamp
             p.set(x, y, c)
     return p
 
 
-def back_door(sector, locked):
-    """The blast door in the back wall, 48x72, with its corridor hidden behind."""
-    wall = SECTORS[sector]["wall"]
+def back_door(sector, locked, step=0):
+    """The door in the back wall, 48x72, `step` frames into opening onto its corridor."""
+    wall, style, t = SECTORS[sector]["wall"], DOOR_STYLES[sector], step / DOOR_STEPS
     p = Pix(48, 72)
     p.shade(lambda x, y: True, wall, lambda x, y: .7 - x / 160 - y / 400)
     for x in (2, 45):
         for y in (10, 36, 62):
             p.set(x, y, 8)
     p.rect(5, 7, 42, 71, 0)
-    for side in (0, 1):
-        for y in range(8, 72):
-            for lx in range(18):
-                x = 6 + lx + side * 18
-                c = dither((2, 3, 4, 5, 6), .55 + (lx % 5 == 1) * .2 - side * .12 - y / 300, x, y)
-                if y > 60:
-                    c = 16 if (lx + y + side * 3) // 3 % 2 else 0
-                elif h32("back", sector, x // 4, y // 6) < .1:
-                    c = RUST[1 + (BAYER[y & 3][x & 3] > 7)]
-                if (side, lx) in ((0, 17), (1, 0)):
-                    c = 0
-                p.set(x, y, c)
-    p.line(10, 30, 14, 34, 2)                         # scratches
-    p.line(31, 44, 35, 41, 2)
+    for y in range(8, 72):
+        for x in range(6, 42):
+            a, b = (x - 6) / 35, (y - 8) / 63
+            c = _leaf(style, a, b, t, x, y, sector)
+            p.set(x, y, _corridor(a, b, x, y) if c is None else c)
     p.rect(20, 2, 27, 5, 1)
     p.rect(21, 3, 26, 4, RED if locked else CYAN)
     return p
@@ -230,12 +298,3 @@ def guardian(state):
     p.outline(0)
     return p
 
-
-def fade_veil(level):
-    """An ordered-dither veil of black covering level/4 of the frame (level 1..4)."""
-    p = Pix(W, H)
-    for y in range(H):
-        for x in range(W):
-            if BAYER[y & 3][x & 3] < level * 4:
-                p.px[y * W + x] = 0
-    return p

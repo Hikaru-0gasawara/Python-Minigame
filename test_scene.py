@@ -5,7 +5,9 @@ import unittest
 from dungeon import EXIT_HITS, Expedition
 from palette import PALETTE, SECTORS
 from props import GRAFFITI, PROP_AT, decor_sprite, elite, prop_sprite
-from room_art import BACK_DOOR, BX1, GUARDIAN_STATES, H, LIGHTS, W, back_door, build_background, guardian, side_door
+from palette import CYAN, RED
+from room_art import (BACK_DOOR, BX1, DOOR_STEPS, DOOR_STYLES, GUARDIAN_STATES, H, LIGHTS, W, back_door,
+                      build_background, guardian, side_door)
 from scene import SECTOR_NAMES, decorations, portal_targets, scene_for, sector_of
 from test_dungeon import make_combat
 
@@ -136,6 +138,36 @@ class RoomKindTests(unittest.TestCase):
         g.enter(0)
         g.player = 1
         self.assertEqual(scene_for(g, 0).decor, decorations(42, (0, 0))[0])   # the same for every player
+
+
+class DoorTests(unittest.TestCase):
+    def test_each_sector_has_its_own_door_style(self):
+        self.assertEqual(set(DOOR_STYLES), set(SECTOR_NAMES))
+        self.assertEqual(len(set(DOOR_STYLES.values())), 3)
+
+    def test_doors_open_frame_by_frame_towards_the_open_frame(self):
+        for sector in SECTOR_NAMES:
+            for draw in (lambda s, sector=sector: back_door(sector, False, s).px,
+                         lambda s, sector=sector: side_door(sector, "left", False, s).px):
+                frames = [draw(step) for step in range(DOOR_STEPS + 1)]
+                likeness = [sum(a == b for a, b in zip(frame, frames[-1])) for frame in frames]
+                with self.subTest(sector=sector):
+                    # Never closes again on the way; the vault's turning wheel may wobble a few pixels.
+                    self.assertTrue(all(later >= earlier - 8 for earlier, later in zip(likeness, likeness[1:])))
+                    self.assertLess(likeness[0], likeness[-1])
+                    self.assertGreater(len({tuple(f) for f in frames}), DOOR_STEPS // 2)
+
+    def test_a_locked_door_shows_red_and_an_opening_one_cyan(self):
+        for sector in SECTOR_NAMES:
+            self.assertEqual(back_door(sector, True).get(23, 3), RED)
+            self.assertEqual(back_door(sector, False, 3).get(23, 3), CYAN)
+
+    def test_side_doors_open_inside_their_closed_outline(self):
+        for side in ("left", "right"):
+            x0, y0, x1, y1 = side_door("deep", side, False).bbox()
+            for step in range(1, DOOR_STEPS + 1):
+                a0, b0, a1, b1 = side_door("deep", side, False, step).bbox()
+                self.assertTrue(x0 <= a0 and y0 <= b0 and a1 <= x1 and b1 <= y1)
 
 
 class PixelArtTests(unittest.TestCase):

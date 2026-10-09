@@ -16,12 +16,12 @@ As today, the rules apply the move only at arrival, duplicate actions are ignore
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Each Sector shows its own door style; doors open frame by frame and show the lock light when locked
-- [ ] The walk-through zooms in integer steps on the doorway and fades with art-pixel dithering
-- [ ] Arrival shows lights stuttering on and the Guardian booting
-- [ ] Looking pans; a Turn change fades to the next player's room
-- [ ] No visible pause on arrival: the next room is prepared during the door animation
-- [ ] Reduced motion cuts every sequence; duplicate input and Turn-passing timeouts are handled as today
-- [ ] Screen tests cover each transition completing once and the reduced-motion cut
+- [x] Each Sector shows its own door style; doors open frame by frame and show the lock light when locked
+- [x] The walk-through zooms in integer steps on the doorway and fades with art-pixel dithering
+- [x] Arrival shows lights stuttering on and the Guardian booting
+- [x] Looking pans; a Turn change fades to the next player's room
+- [x] No visible pause on arrival: the next room is prepared during the door animation
+- [x] Reduced motion cuts every sequence; duplicate input and Turn-passing timeouts are handled as today
+- [x] Screen tests cover each transition completing once and the reduced-motion cut
