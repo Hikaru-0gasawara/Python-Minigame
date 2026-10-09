@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from dungeon import EXIT_HITS, Expedition
 from test_dungeon import make_combat
-from dungeon_ui import DungeonApp, ExpeditionScreen, PORTALS, PLAYER_COLORS
+from dungeon_ui import DungeonApp, ExpeditionScreen, PORTALS, PLAYER_COLORS, ResultsScreen
 
 
 class DungeonUITests(unittest.TestCase):
@@ -306,6 +306,43 @@ class DungeonUITests(unittest.TestCase):
         self.assertEqual((g.player, g.question), (0, None))
         self.pump()
         self.assertIsNotNone(g.question)
+
+    def finish_and_show_results(self, players=2):
+        screen = self.start_seeded(players=players)
+        self.win(screen)
+        self.pump()
+        self.assertIs(self.app.screen, screen)  # The winning room stays up for a moment.
+        pending = screen.job
+        screen.finished_at -= 10
+        self.pump()
+        self.assertNotIn(pending, self.app.tk.call("after", "info"))
+        return screen.game, self.app.screen
+
+    def test_results_name_the_winner_and_show_the_seed(self):
+        game, results = self.finish_and_show_results()
+        self.assertIsInstance(results, ResultsScreen)
+        self.assertEqual(results.winner_label.cget("text"), "JOGADOR 1 ESCAPOU")
+        self.assertEqual(results.winner_label.cget("fg"), PLAYER_COLORS[0])
+        self.assertIn("SEED 0000-002A", results.seed_label.cget("text"))  # Seed 42.
+
+    def test_rematch_on_the_same_seed_rebuilds_the_same_dungeon(self):
+        game, results = self.finish_and_show_results(players=3)
+        results.same_btn.invoke()
+        self.app.update()
+        rematch = self.app.screen.game
+        self.assertEqual((rematch.seed, rematch.difficulty, len(rematch.players)), (42, game.difficulty, 3))
+        self.assertEqual(rematch.dungeon.connections, game.dungeon.connections)
+        self.assertEqual(rematch.status, "playing")
+
+    def test_new_seed_and_menu_leave_no_old_callbacks(self):
+        game, results = self.finish_and_show_results()
+        results.new_btn.invoke()
+        self.app.update()
+        self.assertNotEqual(self.app.screen.game.seed, game.seed)
+        pending = self.app.screen.job
+        self.app.show_setup()
+        self.app.update()
+        self.assertNotIn(pending, self.app.tk.call("after", "info"))
 
     def test_tier_lives_and_penalties_are_shown(self):
         screen = self.start_seeded(players=2)

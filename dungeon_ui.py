@@ -27,6 +27,7 @@ COMPASS = (("N", "NORTE", (0, -1)), ("L", "LESTE", (1, 0)),
            ("S", "SUL", (0, 1)), ("O", "OESTE", (-1, 0)))
 SYMBOLS = {"entrance": "E", "combat": "G", "elite": "!", "treasure": "$", "mimic": "M",
            "trap": "^", "sanctuary": "+", "empty": "·", "exit": "X", "unknown": ""}
+RESULTS_DELAY = 2.0  # Seconds the winning room stays on screen.
 TIER_NAMES = {"easy": "FÁCIL", "medium": "MÉDIA", "hard": "DIFÍCIL"}
 POWER_NAMES = {"ward": "◆ ESCUDO", "hex": "◆ MALDIÇÃO", "swap": "◆ TROCA"}
 
@@ -71,6 +72,41 @@ class DungeonApp(tk.Tk):
     def start(self, difficulty, players, seed=None):
         self.swap(ExpeditionScreen(self, Expedition(difficulty, players, seed)))
 
+    def show_results(self, game):
+        self.swap(ResultsScreen(self, game))
+
+
+class ResultsScreen(tk.Frame):
+    """Names the winner, shows the Seed, and offers a rematch on it or a fresh one."""
+
+    def __init__(self, app, game):
+        super().__init__(app, bg=BG)
+        self.game = game
+        box = tk.Frame(self, bg=PANEL, padx=40, pady=30, highlightthickness=1, highlightbackground=GOLD)
+        box.place(relx=.5, rely=.5, anchor="center")
+        winner = game.winner
+        label(box, "MASMORRA CONQUISTADA", 14, GOLD).pack()
+        self.winner_label = label(box, f"JOGADOR {winner+1} ESCAPOU", 30, PLAYER_COLORS[winner])
+        self.winner_label.pack(pady=(6, 4))
+        self.seed_label = label(box, f"{game.name.upper()}  ·  SEED {format_seed(game.seed)}", 12, TEXT)
+        self.seed_label.pack()
+        label(box, "Compartilhe a seed para desafiar alguém na mesma masmorra.", 9, MUTED).pack(pady=(2, 16))
+        for i, player in enumerate(game.players):
+            label(box, f"J{i+1}  {hearts(player)}   ·   {len(player.visited)} {'sala visitada' if len(player.visited) == 1 else 'salas visitadas'}   ·   "
+                       f"núcleo {player.exit_hits}/{EXIT_HITS}",
+                  11, PLAYER_COLORS[i] if i == winner else MUTED).pack(anchor="w")
+        actions = tk.Frame(box, bg=PANEL)
+        actions.pack(fill="x", pady=(20, 0))
+        players = len(game.players)
+        self.same_btn = button(actions, "REVANCHE · MESMA SEED",
+                               lambda: app.start(game.difficulty, players, game.seed), True)
+        self.new_btn = button(actions, "NOVA SEED", lambda: app.start(game.difficulty, players))
+        self.menu_btn = button(actions, "MENU", app.show_setup)
+        for btn in (self.same_btn, self.new_btn, self.menu_btn):
+            btn.pack(side="left", padx=4)
+            btn.bind("<Return>", lambda e, b=btn: b.invoke())
+        self.same_btn.focus_set()
+
 
 
 class ExpeditionScreen(tk.Frame):
@@ -85,6 +121,7 @@ class ExpeditionScreen(tk.Frame):
         self.last_frame = time.monotonic()
         self.hover = None
         self.finished = False
+        self.finished_at = None
         self.transition = None
         self._shown_question = None
         self.arrival_at = None
@@ -422,6 +459,8 @@ class ExpeditionScreen(tk.Frame):
             self.q_text.configure(text="Área liberada. Escolha uma passagem.")
         else:
             self.q_text.configure(text="O guardião aguarda. Responda ou recue pelo trajeto.")
+        if not playing and not self.finished:
+            self.finished_at = time.monotonic()
         if not playing:
             self.finished = True
             self.transition = None
@@ -619,6 +658,11 @@ class ExpeditionScreen(tk.Frame):
 
     def frame(self):
         now = time.monotonic()
+        # Let the winning moment land on screen, then hand over to the results.
+        if self.finished and now - self.finished_at >= RESULTS_DELAY:
+            self.job = None
+            self.app.show_results(self.game)
+            return
         dt = min(.1, now-self.last_frame)
         self.last_frame = now
         result = self.game.tick()

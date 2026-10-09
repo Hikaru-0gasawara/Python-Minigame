@@ -4,10 +4,10 @@
 
 **Blocked by:** 02 (needs the Seed), 03 (needs a winner).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The results screen names the winning player (with their colour) and shows the Seed
-- [ ] "Same Seed" restarts an identical Dungeon with the same Difficulty and players
-- [ ] "New Seed" restarts with a fresh random Seed
-- [ ] Returning to the menu works and no callbacks from the old Expedition survive
-- [ ] Covered by screen tests
+- [x] The results screen names the winning player (with their colour) and shows the Seed
+- [x] "Same Seed" restarts an identical Dungeon with the same Difficulty and players
+- [x] "New Seed" restarts with a fresh random Seed
+- [x] Returning to the menu works and no callbacks from the old Expedition survive
+- [x] Covered by screen tests
