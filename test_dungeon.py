@@ -6,6 +6,9 @@ from collections import deque
 from dungeon import (BUFFS, CAMPAIGN, DEBUFFS, EXIT_HITS, HARD, LIVES, MODES, PLACED, Expedition,
                      format_seed, generate_dungeon, parse_seed)
 from dungeon_map import CARDINAL_DIRECTIONS, distances
+import font
+from dungeon import TAUNTS
+from hud import BOX_WIDTH
 
 
 def make_combat(game):
@@ -192,6 +195,7 @@ class DungeonTests(unittest.TestCase):
     def test_question_timeout_counts_as_wrong_and_passes_the_turn(self):
         g = self.make_game(players=2)
         g.enter(0)
+        g.start_clock()
         self.now = g.question_deadline
         self.assertFalse(g.enter(1))
         g.question_tier = "easy"
@@ -204,6 +208,7 @@ class DungeonTests(unittest.TestCase):
         g = self.make_game()
         g.enter(0)
         g.question_tier = "easy"
+        g.start_clock()
         self.now = g.question_deadline + .01
         self.assertFalse(self.solve(g)["correct"])
         self.assertFalse(g.has_cleared(g.current))
@@ -415,6 +420,36 @@ class DungeonTests(unittest.TestCase):
         self.assertFalse(g.use_buff(1))  # Not while a Question is open.
         self.assertEqual((g.active.held, g.players[1].skip_next), ("hex", False))
 
+    def test_a_questions_clock_starts_only_once_it_has_been_shown(self):
+        g = self.make_game()
+        g.enter(0)
+        self.assertIsNone(g.question_deadline)
+        self.assertEqual(g.question_remaining, g.question_duration)
+        self.now += 1000                                  # reading never costs time
+        self.assertIsNone(g.tick())
+        g.start_clock()
+        self.assertEqual(g.question_deadline, self.now + g.question_duration)
+        deadline = g.question_deadline
+        g.start_clock()                                   # starting twice changes nothing
+        self.assertEqual(g.question_deadline, deadline)
+        self.now = deadline
+        self.assertFalse(g.tick()["correct"])
+        self.assertIsNone(g.question)                      # the miss ended the Turn
+
+    def test_taunts_follow_tier_and_room_and_the_seed(self):
+        for kind in ("combat", "elite", "exit"):
+            first, second = self.make_game(), self.make_game()
+            for g in (first, second):
+                room = g.exits()[0]
+                room.kind = kind
+                g.enter(0)
+            expected = TAUNTS[kind] if kind != "combat" else TAUNTS[first.question_tier]
+            self.assertIn(first.taunt, expected, kind)
+            self.assertEqual(first.taunt, second.taunt)
+        for lines in TAUNTS.values():
+            for line in lines:
+                self.assertLessEqual(font.measure(line), BOX_WIDTH - 8, line)   # one line in the box
+
     def test_tier_frequencies_follow_each_difficulty(self):
         for difficulty, (_name, _rooms, seconds, weights) in MODES.items():
             g = self.make_game(difficulty)
@@ -492,6 +527,7 @@ class DungeonTests(unittest.TestCase):
         g = self.make_game(players=2)
         g.enter(0)
         g.question_tier = "medium"
+        g.start_clock()
         self.now = g.question_deadline
         self.assertEqual(g.tick()["penalty"], "skip")
         self.assertTrue(g.players[0].skip_next)

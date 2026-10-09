@@ -9,7 +9,7 @@ import math
 import font
 from palette import CYAN, GREEN, METAL, RED, RUST, dither
 from pixels import Pix, h32, poly_inside
-from room_art import H, W, _project
+from room_art import H, W, _project, eye, glitch
 
 CONCRETE = (1, 2, 3, 4, 5, 6, 7)
 # Where each prop's sprite goes in the 320x200 frame (top-left corner).
@@ -34,19 +34,7 @@ def wear(p, key, chips=.05, rust=.03):
             p.px[i] = RUST[1 + int(roll * 1000) % 2]
 
 
-def _eye(p, cx, cy, state, half=3):
-    """An almond eye: dark when dormant, cyan when listening, green once passed."""
-    if state == "dormant":
-        p.line(cx - half, cy, cx + half - 1, cy, 27)
-        return
-    rim, core = (CYAN, 30) if state == "listening" else (20, 21)
-    p.line(cx - half - 1, cy, cx + half, cy, rim)
-    p.line(cx - half, cy - 1, cx + half - 1, cy - 1, 29 if state == "listening" else 21)
-    p.line(cx - half, cy + 1, cx + half - 1, cy + 1, 29 if state == "listening" else 21)
-    p.line(cx - 1, cy, cx, cy, core)
-
-
-def elite(state):
+def elite(state, ink=CYAN):
     """The Elite Guardian: taller, armoured, crested, with ECO's emblem on its chest."""
     p = Pix(60, 100)
 
@@ -59,7 +47,7 @@ def elite(state):
     p.shade(poly_inside([(18, 33), (42, 33), (40, 57), (30, 64), (20, 57)]), METAL, lambda x, y: .72 - y / 160 - (x - 30) / 90)
     p.line(18, 33, 30, 64, 2)
     p.line(42, 33, 30, 64, 2)
-    _eye(p, 30, 46, state, 4)
+    eye(p, 30, 46, state, ink, 4)
     p.shade(poly_inside([(4, 28), (21, 23), (24, 37), (7, 42)]), METAL + (9,), lambda x, y: .78 - y / 110)
     p.shade(poly_inside([(36, 23), (56, 28), (53, 42), (36, 37)]), (2,) + METAL[:-1], lambda x, y: .5 - y / 140)
     for x, y in ((8, 31), (15, 28), (42, 28), (50, 32)):
@@ -72,12 +60,14 @@ def elite(state):
     for y in range(13, 25, 2):
         p.line(23, y, 36, y, 3)
     p.line(33, 13, 30, 24, 1)
-    _eye(p, 29, 18, state, 3)
+    eye(p, 29, 18, state, ink, 3)
     for x0, y0, x1, y1 in ((15, 20, 8, 84), (44, 20, 51, 84)):
         p.line(x0, y0, x1, y1, 1)
         p.line(x0 + 1, y0, x1 + 1, y1, 4)
     wear(p, ("elite", state), .04, .03)
     p.outline(0)
+    if state == "glitch":
+        glitch(p)
     return p
 
 
@@ -227,7 +217,7 @@ def gate(hits):
     for a in range(0, 360, 30):                     # bolts around the rim
         x, y = 32.5 + 25 * math.cos(math.radians(a)), 40 + 25 * math.sin(math.radians(a))
         p.set(int(x), int(y), 9)
-    _eye(p, 33, 40, "listening" if hits < 3 else "cleared", 6)
+    eye(p, 33, 40, "listening" if hits < 3 else "cleared", CYAN, 6)
     for i, (x, y) in enumerate(((5, 38), (30, 4), (56, 38))):
         lit = i < hits
         p.rect(x, y, x + 4, y + 4, 0)

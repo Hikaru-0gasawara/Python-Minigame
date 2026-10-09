@@ -14,6 +14,7 @@ CONCRETE = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 RUST = (11, 12, 13, 14)
 METAL = (3, 4, 5, 6, 7, 8)
 GREEN = (18, 19, 20, 21)
+PLAYER_INK = (29, 17, 31, 21)            # cyan, amber, violet, green
 RED, CYAN, AMBER = 24, 28, 16
 
 # Each ramp keeps one hue family, so dithering never flickers between hues.

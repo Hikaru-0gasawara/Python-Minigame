@@ -46,6 +46,19 @@ ROOMS = {
     "unknown": ("Desconhecida", "O que há além?", "#b4c6cf", 0),
 }
 PLACED = [kind for kind, (*_, weight) in ROOMS.items() if weight]
+# What ECO says through a Guardian before its Question: by Tier, or by the Elite and Exit rooms.
+TAUNTS = {
+    "easy": ("Mais um. Prove que ainda pensa.", "Uma pergunta simples. Até para você.",
+             "Responda, e talvez eu te deixe passar.", "Vejamos se você ainda raciocina."),
+    "medium": ("Você hesita. Eu nunca hesito.", "Cada erro seu me ensina algo.",
+               "Pense rápido. Eu já pensei por você.", "Outros pararam exatamente aqui."),
+    "hard": ("Esta eu guardei para os teimosos.", "Ninguém acertou esta em cem anos.",
+             "Errar aqui custa caro. Tente.", "Vou gostar de ver você falhar."),
+    "elite": ("Eu sou a parede entre você e a saída.", "Fui feita para quebrar quem chega até aqui.",
+              "Acerte, e talvez eu sinta algo parecido com respeito."),
+    "exit": ("Três verdades e você sai. Nenhuma mentira.", "Ninguém escapa de mim. Prove o contrário.",
+             "Este é o meu núcleo. Fale com cuidado."),
+}
 
 
 @dataclass
@@ -149,7 +162,8 @@ class Expedition:
         self.player = 0
         self.question = None
         self.question_tier = None
-        self.question_deadline = 0
+        self.taunt = None
+        self.question_deadline = None
         self.question_duration = 0
         self.status = "playing"
         self.winner = None
@@ -165,6 +179,9 @@ class Expedition:
 
     @property
     def question_remaining(self):
+        """The Question's full time until its clock starts, then what is left of it."""
+        if self.question_deadline is None:
+            return self.question_duration
         return max(0, self.question_deadline - self.clock())
 
     def has_cleared(self, room, player=None):
@@ -303,11 +320,19 @@ class Expedition:
         self.question_tier = ("hard" if self.current.kind == "elite"
                               else self.rng.choices(TIERS, self.tier_weights)[0])
         self.question = self.bank.draw(self.question_tier, self.rng)
+        kind = self.current.kind
+        self.taunt = self.rng.choice(TAUNTS[kind if kind in ("elite", "exit") else self.question_tier])
         self.question_duration = self.question_time
-        self.question_deadline = self.clock() + self.question_time
+        self.question_deadline = None
+
+    def start_clock(self):
+        """Start the Question's time once the screen has shown all of it."""
+        if self.question is not None and self.question_deadline is None:
+            self.question_deadline = self.clock() + self.question_duration
 
     def tick(self):
-        if self.status == "playing" and self.question is not None and self.question_remaining <= 0:
+        if (self.status == "playing" and self.question is not None and self.question_deadline is not None
+                and self.question_remaining <= 0):
             return self.submit("", expired=True)
         return None
 

@@ -84,6 +84,7 @@ Troca são usadas no painel lateral (“USAR EM: J2 / J3 …”) e não gastam o
   clicando numa sala vizinha no mapa. **Olhar** ou **Alt + Q/E** gira a câmera
   90 graus; cada jogador mantém a sua direção entre os turnos.
 - Digite a resposta e pressione **Enter**.
+- **SOM** (embaixo do mapa) ou **Alt + M** liga e desliga o som.
 - “Efeitos animados” liga ou desliga portas animadas, caminhada, partículas e
   avisos de turno; desligado, os movimentos são imediatos.
 

@@ -13,7 +13,7 @@ import tempfile
 import time
 import tkinter as tk
 
-from palette import BAYER, hex_color
+from palette import BAYER, PLAYER_INK, hex_color
 from pixels import png
 from props import PROP_AT, decor_sprite, elite, prop_sprite
 from room_art import (BACK_DOOR, GUARDIAN_ASIDE, GUARDIAN_AT, H, LIGHTS, W,
@@ -98,12 +98,13 @@ class PixelView:
     def _sprite(self, target, key, build, x=0, y=0):
         target.tk.call(target, "copy", self._photo(key, lambda: build().png()), "-to", x, y)
 
-    def compose(self, scene, lights="on", glitch=False, opening=None, target=None):
+    def compose(self, scene, lights="on", glitch=False, opening=None, target=None, aside=None):
         """Draw the room into a native frame, back to front.
 
         Layers: wall decorations, doors and the core gate, floor props, the
         Guardian, then cables hanging in front of everything. `opening` is
-        (portal, step) for a door caught mid-way open.
+        (portal, step) for a door caught mid-way open; `aside` is how far a
+        Guardian has stepped out of the way (by default, all the way once Cleared).
         """
         target = target or self.frame
         target.tk.call(target, "copy", self._background(scene, lights))
@@ -129,13 +130,11 @@ class PixelView:
             name, state = scene.prop
             self._sprite(target, ("prop", name, state), lambda: prop_sprite(name, state), *PROP_AT[name])
         if scene.guardian:
-            aside = GUARDIAN_ASIDE if scene.guardian == "cleared" else 0
-            if scene.elite:
-                x, y = PROP_AT["elite"]
-                self._sprite(target, ("elite", scene.guardian), lambda: elite(scene.guardian), x + aside, y)
-            else:
-                x, y = GUARDIAN_AT
-                self._sprite(target, ("guardian", scene.guardian), lambda: guardian(scene.guardian), x + aside, y)
+            ink = PLAYER_INK[scene.player]
+            if aside is None:
+                aside = GUARDIAN_ASIDE if scene.guardian == "cleared" else 0
+            draw, (x, y) = (elite, PROP_AT["elite"]) if scene.elite else (guardian, GUARDIAN_AT)
+            self._sprite(target, (draw.__name__, scene.guardian, ink), lambda: draw(scene.guardian, ink), x + aside, y)
         for variant, x, y in hanging:
             self._sprite(target, ("decor", "cables", variant), lambda: decor_sprite("cables", variant), x, y)
 

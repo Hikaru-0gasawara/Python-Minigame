@@ -8,13 +8,13 @@ from dataclasses import dataclass, field
 import math
 
 import font
+from palette import PLAYER_INK
 from dungeon import EFFECT_TEXT, EXIT_HITS, LIVES, PENALTIES, ROOMS, format_seed
 from pixels import Pix
 from room_art import H, W
 from scene import COMPASS, sector_of
 
-PLAYER_INK = (29, 17, 31, 21)           # cyan, amber, violet, green
-TEXT, MUTED, DIM, PANEL, EDGE, GOLD, ALERT = 10, 8, 5, 1, 4, 16, 25
+TEXT, MUTED, DIM, PANEL, EDGE, GOLD, ALERT, ECO = 10, 8, 5, 1, 4, 16, 25, 28
 KIND_INK = {"combat": 28, "elite": 15, "treasure": 16, "mimic": 14, "trap": 24, "sanctuary": 21,
             "empty": 7, "exit": 25, "entrance": 27, "unknown": DIM}
 SECTOR_NAMES = {"shallow": "RASO", "middle": "MEIO", "deep": "FUNDO"}
@@ -176,19 +176,32 @@ def cards(game, can_retreat):
     return Piece(p, 0, CARDS_TOP, texts, regions)
 
 
-def question_lines(game, typed, blink):
-    """The answer box's lines while a Guardian waits for an answer."""
+def spoken_lines(game):
+    """What the Guardian says, wrapped for the box: ECO's Taunt lines, then the Question's."""
+    question = font.wrap(game.question["question"], BOX_WIDTH - 8)
+    if len(question) > MAX_QUESTION_LINES:     # never let the box climb over the top panels
+        question = question[:MAX_QUESTION_LINES - 1] + [question[MAX_QUESTION_LINES - 1][:-2] + "…"]
+    return font.wrap(game.taunt, BOX_WIDTH - 8), question
+
+
+def question_lines(game, typed, blink, shown=None):
+    """The answer box's lines while a Guardian speaks and waits for an answer.
+
+    `shown` is the spoken lines cut to what has been revealed so far; the
+    answer line only appears once everything has been said.
+    """
     seconds = math.ceil(game.question_remaining)
     miss = "ESCUDO ANULA" if game.active.held == "ward" else EFFECT_TEXT[PENALTIES[game.question_tier]].upper()
     meta = f"J{game.player + 1} · {TIER_NAMES[game.question_tier]} · ERRO: {miss} · {seconds}s"
     if game.current.kind == "exit":
         meta += f" · NÚCLEO {game.active.exit_hits}/{EXIT_HITS}"
     ink = ALERT if seconds <= 5 else PLAYER_INK[game.player]
-    question = font.wrap(game.question["question"], BOX_WIDTH - 8)
-    if len(question) > MAX_QUESTION_LINES:     # never let the box climb over the top panels
-        question = question[:MAX_QUESTION_LINES - 1] + [question[MAX_QUESTION_LINES - 1][:-2] + "…"]
-    lines = [(meta, ink)] + [(line, TEXT) for line in question]
-    return lines + [(f"> {typed}{'_' if blink else ' '}", PLAYER_INK[game.player])]
+    taunt, question = spoken_lines(game)
+    spoken = taunt + question
+    revealed = spoken if shown is None else shown
+    lines = [(meta, ink)] + [(line, ECO if i < len(taunt) else TEXT) for i, line in enumerate(revealed)]
+    answer = f"> {typed}{'_' if blink else ' '}" if revealed == spoken else ""
+    return lines + [(answer, PLAYER_INK[game.player])]
 
 
 def message_lines(game, message, ink, can_retreat):
@@ -223,6 +236,14 @@ def edges():
         piece.regions.append((("look", turn), (x, 92, x + piece.pix.w - 1, 92 + piece.pix.h - 1)))
         pieces.append(piece)
     return pieces
+
+
+def mute_toggle(muted, y):
+    """Under the minimap: whether sound is on; a click toggles it."""
+    piece = text_panel([("SOM ○" if muted else "SOM ●", MUTED if muted else TEXT)], 0, y)
+    x = piece.x = W - piece.pix.w - 2
+    piece.regions.append((("mute",), (x, y, x + piece.pix.w - 1, y + piece.pix.h - 1)))
+    return piece
 
 
 def banner(lines, y, border):

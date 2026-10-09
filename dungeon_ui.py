@@ -7,15 +7,17 @@ import sys
 import time
 import tkinter as tk
 
+from audio import Audio
 import font
 import hud
+from dialogue import Dialogue
 from dungeon import EFFECT_TEXT, EXIT_HITS, Expedition, ROOMS, format_seed
 from hud import hearts
 from menu_ui import Setup
 from motion import smooth
 from palette import hex_color
 from pixel_view import PixelView
-from room_art import DOOR_STEPS, H, W
+from room_art import DOOR_STEPS, GUARDIAN_ASIDE, H, W
 from scene import portal_targets, relative_portals, scene_for, sector_of
 
 BG = "#080e12"
@@ -33,9 +35,11 @@ ALT_MASK = 0x20000 if sys.platform == "win32" else 0x8
 PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
            ("L", "LESTE", (1, 0)), ("S", "SUL", (0, 1)))
 RESULTS_DELAY = 2.0  # Seconds the winning room stays on screen.
+ROOM_SOUNDS = {"treasure": "chest", "mimic": "trap", "trap": "trap"}   # a first visit's Buff or Debuff
 OPEN, STEP = .30, .07          # a walk: the door opens, then each zoom step into the doorway
 WALK = OPEN + 6 * STEP
 ARRIVE, TURN_FADE = .6, .25
+REACT, GLITCH, STEP_ASIDE = .9, .5, .4   # after an answer: how long the Guardian's reaction holds the view
 # An arrival's tubes: (seconds since arriving, lights) - dark, a stutter, then on.
 ARRIVAL_LIGHTS = ((.25, "off"), (.32, "on"), (.40, "off"), (.50, "dimmed"), (math.inf, "on"))
 
@@ -62,6 +66,7 @@ class DungeonApp(tk.Tk):
         self.configure(bg=BG)
         self.screen = None
         self.effects = tk.BooleanVar(value=True)
+        self.audio = Audio()
         self.show_setup()
 
     def swap(self, screen):
@@ -133,6 +138,10 @@ class ExpeditionScreen(tk.Frame):
         self.transition = None
         self.arrival_at, self.arrival_player = None, 0
         self.presented = {}
+        self.dialogue, self._voiced = None, 0
+        self.reaction = None                 # {"player", "kind", "start"} right after an answer
+        # The Guardian's voice: one blip per batch of letters, as a new sound cuts the previous one anyway.
+        self.on_voice = lambda letters: self.app.audio.play("blip")
         self._active_player = None
         self.turn_changed_at = 0
         self.typed = ""
@@ -157,7 +166,7 @@ class ExpeditionScreen(tk.Frame):
         bindings = [(f"<Alt-{key}>", lambda e, p=portal: self.navigate(p))
                     for key, portal in (("Left", 0), ("Up", 1), ("Right", 2), ("Down", 3))]
         bindings += [(f"<Alt-{key}>", lambda e, d=turn: self.look(d)) for key, turn in (("q", -1), ("e", 1))]
-        bindings += [("<Alt-r>", lambda e: self.back() or "break")]
+        bindings += [("<Alt-r>", lambda e: self.back() or "break"), ("<Alt-m>", lambda e: self.toggle_mute() or "break")]
         bindings += [(f"<Alt-Key-{i + 1}>", lambda e, t=i: self.use_buff(t) or "break") for i in range(len(game.players))]
         bindings += [("<Key>", self.on_key), ("<Escape>", lambda e: self.app.show_setup())]
         self.nav_bindings = [(sequence, app.bind(sequence, handler)) for sequence, handler in bindings]
@@ -185,8 +194,19 @@ class ExpeditionScreen(tk.Frame):
     # ---------------------------------------------------------------- actions
 
     def busy(self):
-        """A walk, a look or an arrival is still on screen; movement waits for it."""
-        return self.transition is not None or self.arrival_at is not None
+        """A walk, a look, an arrival or a Guardian's reaction is on screen; movement waits for it."""
+        return self.transition is not None or self.arrival_at is not None or self.reaction is not None
+
+    def _speak(self, now):
+        """Advance the Guardian's lines: voice the new letters, start the clock once all are shown."""
+        if self.dialogue is None:
+            return
+        letters = self.dialogue.voiced(self._voiced, now)
+        self._voiced = self.dialogue.count(now)
+        if letters:
+            self.on_voice(letters)
+        if self.dialogue.done(now):
+            self.game.start_clock()
 
     def _walk(self, target, back):
         """Start walking towards a neighbouring room; its background is built meanwhile."""
@@ -203,6 +223,7 @@ class ExpeditionScreen(tk.Frame):
         exits = g.exits()
         if not isinstance(door, int) or not 0 <= door < len(exits):
             return
+        self.app.audio.play("door")
         if self.app.effects.get():
             self._walk(exits[door].key, back=False)
             self.say("Abrindo passagem…", hud.PLAYER_INK[g.player])
@@ -215,6 +236,9 @@ class ExpeditionScreen(tk.Frame):
         mover = self.game.player
         moved = self.game.retreat() if back else self.game.enter(exits.index(target)) if target in exits else False
         if moved:
+            sound = ROOM_SOUNDS.get(self.game.dungeon.rooms[target].kind)
+            if sound and self.game.event:
+                self.app.audio.play(sound)
             if self.app.effects.get():
                 self.arrival_at, self.arrival_player = time.monotonic(), mover
             self.resume_at = 0
@@ -283,11 +307,16 @@ class ExpeditionScreen(tk.Frame):
         if self.busy() or g.active.came_from is None or g.status != "playing":
             return
         target = g.active.came_from
+        self.app.audio.play("door")
         if self.app.effects.get():
             self._walk(target, back=True)
             self.refresh()
         else:
             self._arrive(target, back=True)
+
+    def toggle_mute(self):
+        self.app.audio.toggle_mute()
+        self.refresh()
 
     def use_buff(self, target):
         if not self.busy() and self.game.use_buff(target):
@@ -299,6 +328,13 @@ class ExpeditionScreen(tk.Frame):
         g = self.game
         if g.status != "playing" or g.question is None or event.state & ALT_MASK:
             return None
+        now = time.monotonic()
+        if self.dialogue and not self.dialogue.done(now):
+            self.dialogue.complete()          # any key finishes the Guardian's lines at once
+            self._speak(now)
+            if event.keysym in ("Return", "KP_Enter"):
+                self.refresh()
+                return "break"
         if event.keysym in ("Return", "KP_Enter"):
             self.submit()
         elif event.keysym == "BackSpace":
@@ -320,8 +356,11 @@ class ExpeditionScreen(tk.Frame):
 
     def result(self, result):
         good = result["correct"]
+        self.app.audio.play("correct" if good else "wrong")
         author = result.get("player")
         ink = hud.PLAYER_INK[author - 1] if good and author else hud.ALERT
+        if self.app.effects.get() and author:
+            self.reaction = {"player": author - 1, "kind": "hit" if good else "miss", "start": time.monotonic()}
         self.say((f"J{author} · " if author else "") + result["message"], ink)
         self.resume_at = time.monotonic() + (1.3 if good else 3.0)
         caption = f"J{author}  ✓" if good else EFFECT_TEXT[result["penalty"]].upper()
@@ -395,6 +434,15 @@ class ExpeditionScreen(tk.Frame):
         native = self.renderer.to_native(event.x, event.y)
         if native is None:
             return
+        if any(action == ("mute",) and self._hits(rect, native) for action, rect in self.regions):
+            self.toggle_mute()                # even while the Guardian talks: muting must not skip its lines
+            return
+        now = time.monotonic()
+        if self.dialogue and not self.dialogue.done(now):
+            self.dialogue.complete()          # a click finishes the Guardian's lines, like any key
+            self._speak(now)
+            self.refresh()
+            return
         for action, rect in self.regions:
             if self._hits(rect, native):
                 if action[0] == "look":
@@ -426,13 +474,22 @@ class ExpeditionScreen(tk.Frame):
         if g.question is not self._shown_question:
             self.typed = ""
             self._shown_question = g.question
+            self.dialogue, self._voiced = None, 0
+            if g.question is not None:
+                taunt, question = hud.spoken_lines(g)
+                # The Guardian starts talking once an arrival has settled, never in the dark.
+                start = time.monotonic() if self.arrival_at is None else self.arrival_at + ARRIVE
+                self.dialogue = Dialogue(taunt + question, start)
+                if not self.app.effects.get():
+                    self.dialogue.complete()
+        self._speak(time.monotonic())
         if not playing and not self.finished:
             self.finished_at = time.monotonic()
         if not playing:
             self.finished = True
             self.transition = None
             self.particles.clear()
-            self.arrival_at = None
+            self.arrival_at = self.reaction = None
         self.update_players(time.monotonic())
         self.draw_scene(time.monotonic())
 
@@ -469,8 +526,12 @@ class ExpeditionScreen(tk.Frame):
             self.arrival_at = None
             if self.arrival_player != g.player:
                 self.turn_changed_at = now   # only now fade over to whoever plays next
+        if self.reaction is not None and (not effects or now - self.reaction["start"] >= REACT):
+            if self.reaction["player"] != g.player:
+                self.turn_changed_at = now
+            self.reaction = None
         viewer, facing = g.player, self.facing
-        opening = pan = zoom = lights = None
+        opening = pan = zoom = lights = aside = None
         centre, fade, booting = (W // 2, H // 2), 0, False
         action = self.transition if effects else None
         if action and action["type"] == "look":
@@ -494,22 +555,32 @@ class ExpeditionScreen(tk.Frame):
             fade = max(0, 4 - int(age / .05))
             lights = next(state for until, state in ARRIVAL_LIGHTS if age < until)
             booting = age < .55
+        elif self.reaction is not None:
+            # The Guardian answers the answer in the room it happened, before anyone else plays.
+            age = now - self.reaction["start"]
+            viewer = self.reaction["player"]
+            facing = self.facings[viewer]
         elif effects and now - self.turn_changed_at < TURN_FADE:
             fade = max(0, 4 - int((now - self.turn_changed_at) / TURN_FADE * 5))
         self.canvas.delete("all")
         scene = scene_for(g, facing, viewer)
         if booting and scene.guardian in ("dormant", "listening"):
             scene = replace(scene, guardian="dormant")
+        if self.reaction is not None and scene.guardian:
+            if self.reaction["kind"] == "miss" and scene.guardian != "cleared" and age < GLITCH:
+                scene = replace(scene, guardian="glitch")
+            elif self.reaction["kind"] == "hit" and scene.guardian == "cleared":
+                aside = int(GUARDIAN_ASIDE * smooth(age / STEP_ASIDE))
         if self._scene is None or (scene.room_key, viewer) != (self._scene.room_key, self._scene_player):
             self.particles.clear()       # particles belong to the room they were born in
         self._scene, self._scene_player = scene, viewer
         lights = lights or ("dimmed" if effects and scene.flicker and now < self._flicker_until else "on")
         glitch = effects and now < self._glitch_until
-        view.compose(scene, lights, glitch, opening)
+        view.compose(scene, lights, glitch, opening, aside=aside)
         if pan:
             view.compose(scene_for(g, action["to"], viewer), lights, glitch, target=view.other)
         self.presented = {"viewer": viewer, "opening": opening, "zoom": zoom, "centre": centre, "fade": fade,
-                          "pan": pan, "lights": lights, "guardian": scene.guardian}
+                          "pan": pan, "lights": lights, "guardian": scene.guardian, "aside": aside}
         view.clear_hud()
         can_retreat = playing and g.active.came_from is not None and not self.transition
         players = tuple((p.position, p.exit_hits, p.lives, p.skip_next, p.held) for p in g.players)
@@ -525,10 +596,15 @@ class ExpeditionScreen(tk.Frame):
         self.map_rect = (mini.x, mini.y, mini.x + mini.pix.w - 1, mini.y + mini.pix.h - 1)
         self.map_positions = {key: view.to_canvas(*c) for key, c in self._map_centres.items()}
         self.map_radius = view.scale * max(1, self._map_cell // 2)
+        muted = self.app.audio.muted
+        mute = self._put("mute", muted, lambda: hud.mute_toggle(muted, mini.y + mini.pix.h + 2))
+        self.regions += mute.regions if playing else []
         cards = self._put("cards", (g.player, g.status, players, can_retreat), lambda: hud.cards(g, can_retreat))
         self.regions += cards.regions
         if g.question is not None and playing:
-            lines = hud.question_lines(g, self.typed, int(now * 2) % 2 == 0)
+            revealing = self.dialogue is not None and not self.dialogue.done(now)
+            lines = hud.question_lines(g, self.typed, int(now * 2) % 2 == 0,
+                                       self.dialogue.shown(now) if revealing else None)
         else:
             behind = self.door_label(self.hover) if self.hover is not None and playing else None
             lines = hud.message_lines(g, behind or self.message, hud.TEXT if behind else self.message_ink, can_retreat)
@@ -568,6 +644,7 @@ class ExpeditionScreen(tk.Frame):
             self._put("finished", tuple(ending), lambda: hud.banner(ending, 60, hud.GOLD))
         view.present(zoom, centre, fade, pan)
         self.hud = {"badge": badge.texts, "map": mini.texts, "cards": cards.texts, "box": [t for t, _ in lines],
+                    "mute": mute.texts,
                     "tab": self.tab_rect is not None}
 
     def ambience(self, now):
@@ -598,6 +675,7 @@ class ExpeditionScreen(tk.Frame):
             return
         dt = min(.1, now - self.last_frame)
         self.last_frame = now
+        self._speak(now)
         result = self.game.tick()
         if result:
             self.result(result)

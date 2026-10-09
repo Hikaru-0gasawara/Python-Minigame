@@ -52,6 +52,7 @@ class Scene:
     decor: tuple = ()      # (name, variant, x, y) decorations, the same for every player
     flicker: bool = False  # a broken tube that stutters
     emitters: tuple = ()   # (particle, x, y) sources of ambient particles
+    player: int = 0        # whose view this is; a listening Guardian's eye takes their colour
 
 
 def room_prop(game, room, player=None):
@@ -125,4 +126,4 @@ def scene_for(game, facing, player=None):
         x, y = PROP_AT["pod"]
         emitters += (("bubbles", x + 23, y + 40),)
     return Scene(game.seed, room.key, room.kind, sector_of(game.dungeon, room), facing, doors, guardian,
-                 room.kind == "elite", prop, decor, flicker, emitters)
+                 room.kind == "elite", prop, decor, flicker, emitters, index)

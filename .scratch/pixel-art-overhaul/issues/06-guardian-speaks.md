@@ -12,11 +12,11 @@ Sound comes in ticket 07; this ticket only exposes a hook per revealed character
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Taunt then Question appear letter by letter; Enter or a click completes them instantly
-- [ ] The Question's deadline is set only once the text is fully shown, then lasts the full Question time
-- [ ] The answer is typed in the dialogue box; Tier and miss cost are shown
-- [ ] Taunts vary by Tier and Room kind and are reproducible from the Seed
-- [ ] The statue listens in the player's colour, glitches on a miss and steps aside when Cleared
-- [ ] Rules tests cover the on-demand clock; Tk-free tests cover dialogue pacing; screen tests cover the flow
+- [x] Taunt then Question appear letter by letter; Enter or a click completes them instantly
+- [x] The Question's deadline is set only once the text is fully shown, then lasts the full Question time
+- [x] The answer is typed in the dialogue box; Tier and miss cost are shown
+- [x] Taunts vary by Tier and Room kind and are reproducible from the Seed
+- [x] The statue listens in the player's colour, glitches on a miss and steps aside when Cleared
+- [x] Rules tests cover the on-demand clock; Tk-free tests cover dialogue pacing; screen tests cover the flow

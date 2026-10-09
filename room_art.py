@@ -245,10 +245,30 @@ def back_door(sector, locked, step=0):
     return p
 
 
-GUARDIAN_STATES = ("dormant", "listening", "cleared")
+GUARDIAN_STATES = ("dormant", "listening", "cleared", "glitch")
 
 
-def guardian(state):
+def eye(p, cx, cy, state, ink=CYAN, half=3):
+    """An almond eye: dark when dormant, in the listener's colour, green once passed, red on a miss."""
+    if state == "dormant":
+        p.line(cx - half, cy, cx + half - 1, cy, 27)
+        return
+    rim, lid, core = {"listening": (ink, ink, 30), "cleared": (20, 21, 21), "glitch": (24, 25, 30)}[state]
+    p.line(cx - half - 1, cy, cx + half, cy, rim)
+    p.line(cx - half, cy - 1, cx + half - 1, cy - 1, lid)
+    p.line(cx - half, cy + 1, cx + half - 1, cy + 1, lid)
+    p.line(cx - 1, cy, cx, cy, core)
+
+
+def glitch(p):
+    """Tear a sprite sideways in a few bands, the way a failing screen does."""
+    for top, rows, shift in ((p.h // 6, 4, 2), (p.h // 2, 3, -3), (p.h * 3 // 4, 2, 2)):
+        for y in range(top, min(p.h, top + rows)):
+            row = p.px[y * p.w:(y + 1) * p.w]
+            p.px[y * p.w:(y + 1) * p.w] = row[-shift:] + row[:-shift]   # rotate the row by `shift`
+
+
+def guardian(state, ink=CYAN):
     """The Guardian: a hooded concrete sentinel whose face is a cracked screen."""
     concrete = (1, 2, 3, 4, 5, 6, 7, 8)
     p = Pix(48, 86)
@@ -270,18 +290,10 @@ def guardian(state):
     for y in range(12, 22, 2):
         p.line(18, y, 29, y, 3)
     p.line(27, 12, 24, 21, 1)                         # the crack across the screen
-    if state == "dormant":
-        p.line(21, 16, 26, 16, 27)
-    elif state == "listening":
-        p.line(20, 16, 27, 16, CYAN)
-        p.line(21, 15, 26, 15, 29)
-        p.line(21, 17, 26, 17, 29)
-        p.line(22, 16, 25, 16, 30)
+    eye(p, 24, 16, state, ink, 4)
+    if state == "listening":
         for x, y in ((17, 16), (30, 16), (23, 13), (24, 20)):
-            p.set(x, y, CYAN)
-    else:
-        p.line(21, 16, 26, 16, 20)
-        p.line(22, 16, 25, 16, 21)
+            p.set(x, y, ink)                      # the glow spilling onto the screen
     for x0, y0, x1, y1 in ((14, 18, 8, 72), (33, 18, 39, 72)):   # cables down its back
         p.line(x0, y0, x1, y1, 1)
         p.line(x0 + 1, y0, x1 + 1, y1, 4)
@@ -296,5 +308,7 @@ def guardian(state):
     for x in range(12, 36, 7):
         p.set(x, 73, 12)
     p.outline(0)
+    if state == "glitch":
+        glitch(p)
     return p
 

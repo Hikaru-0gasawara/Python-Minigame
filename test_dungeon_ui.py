@@ -2,23 +2,27 @@
 
 import json
 from pathlib import Path
+import time
 import unittest
 from types import SimpleNamespace
 
+from audio import Audio
 import font
 import hud
 from dungeon import EXIT_HITS, Expedition
 from scene import sector_of
 from test_dungeon import make_combat
-from dungeon_ui import (ALT_MASK, ARRIVE, OPEN, STEP, TURN_FADE, WALK, DungeonApp, ExpeditionScreen, PORTALS,
-                        PLAYER_COLORS, ResultsScreen)
-from room_art import DOOR_STEPS
+from dungeon_ui import (ALT_MASK, ARRIVE, OPEN, REACT, STEP, STEP_ASIDE, TURN_FADE, WALK, DungeonApp,
+                        ExpeditionScreen, PORTALS, PLAYER_COLORS, ResultsScreen)
+from room_art import DOOR_STEPS, GUARDIAN_ASIDE
 
 
 class DungeonUITests(unittest.TestCase):
     def setUp(self):
         self.app = DungeonApp()
         self.app.effects.set(False)
+        self.sounds = []          # the names played; None is a stop
+        self.app.audio = Audio(lambda path: self.sounds.append(path and Path(path).stem))
         # Keep the test window off the user's visible desktop.
         self.app.geometry("1000x760+20000+20000")
         self.errors = []
@@ -110,8 +114,9 @@ class DungeonUITests(unittest.TestCase):
                                             "and which scientist presented the explanation? " * 4,
                                 "answer": "example"}
         screen.refresh()
-        self.assertEqual(len(screen.hud["box"]), 1 + hud.MAX_QUESTION_LINES + 1)
-        self.assertTrue(screen.hud["box"][hud.MAX_QUESTION_LINES].endswith("…"))
+        taunt = len(hud.spoken_lines(screen.game)[0])
+        self.assertEqual(len(screen.hud["box"]), 1 + taunt + hud.MAX_QUESTION_LINES + 1)
+        self.assertTrue(screen.hud["box"][taunt + hud.MAX_QUESTION_LINES].endswith("…"))
         badge_bottom = screen._layers["badge"][1].y + screen._layers["badge"][1].pix.h
         self.assertGreater(screen.box_rect[1], badge_bottom)
 
@@ -428,6 +433,144 @@ class DungeonUITests(unittest.TestCase):
         self.assertEqual((screen.facing, screen.presented["pan"]), (1, None))
         self.miss(screen)
         self.assertEqual((g.player, screen.presented["fade"]), (1, 0))
+
+    def face_guardian(self, players=1):
+        """With effects on, put the active player before a Guardian without a walk."""
+        screen = self.start_seeded(players=players)
+        self.app.effects.set(True)
+        screen.game.enter(0)
+        screen.refresh()
+        return screen
+
+    def test_the_guardian_speaks_letter_by_letter_and_the_clock_waits(self):
+        screen = self.face_guardian()
+        g = screen.game
+        voiced = []
+        screen.on_voice = voiced.append
+        start = screen.dialogue.start
+        screen.draw_scene(start + .1)
+        taunt, question = hud.spoken_lines(g)
+        box = screen.hud["box"]
+        self.assertTrue(taunt[0].startswith(box[1]) and box[1] != taunt[0])   # the Taunt is still arriving
+        self.assertEqual(box[-1], "")                                          # no answer line yet
+        self.assertIsNone(g.question_deadline)
+        self.key(screen, "\r", "Return")                                      # Enter finishes the lines...
+        self.assertIsNotNone(g.question_deadline)                              # ...and starts the clock
+        self.assertIsNotNone(g.question)                                       # without answering
+        self.assertEqual(screen.hud["box"][1:-1], taunt + question)
+        self.assertTrue(screen.hud["box"][-1].startswith("> "))
+        self.assertGreater(sum(voiced), 0)
+        self.solve(screen)
+        self.assertTrue(g.has_cleared(g.current))
+
+    def test_a_click_finishes_the_guardians_lines_without_moving(self):
+        screen = self.face_guardian()
+        g = screen.game
+        room = g.current.key
+        x0, y0, x1, y1 = screen.renderer.regions[1]
+        x, y = screen.renderer.to_canvas((x0 + x1) // 2, (y0 + y1) // 2)
+        screen.click(SimpleNamespace(x=x, y=y))
+        self.assertTrue(screen.dialogue.done(0))
+        self.assertIsNotNone(g.question_deadline)
+        self.assertEqual(g.current.key, room)
+
+    def test_reduced_motion_shows_every_word_and_starts_the_clock(self):
+        screen = self.start_seeded()
+        screen.enter(0)
+        g = screen.game
+        taunt, question = hud.spoken_lines(g)
+        self.assertEqual(screen.hud["box"][1:-1], taunt + question)
+        self.assertIsNotNone(g.question_deadline)
+
+    def test_a_listening_guardians_eye_takes_the_answering_players_colour(self):
+        screen = self.start_seeded(players=2)
+        g = screen.game
+        screen.enter(0)
+        self.miss(screen)
+        screen.enter(0)
+        self.assertEqual((g.player, screen._scene.player, screen.presented["guardian"]), (1, 1, "listening"))
+        self.assertIn(("guardian", "listening", hud.PLAYER_INK[1]), screen.renderer._photos)
+
+    def test_a_miss_glitches_the_guardian_in_the_answerers_room_before_the_turn_passes(self):
+        screen = self.face_guardian(players=2)
+        g = screen.game
+        room = g.current.key
+        self.miss(screen)
+        self.assertEqual(g.player, 1)
+        start = screen.reaction["start"]
+        screen.draw_scene(start + .1)
+        self.assertEqual((screen.presented["viewer"], screen.presented["guardian"]), (0, "glitch"))
+        self.assertEqual(screen._scene.room_key, room)
+        self.assertTrue(screen.busy())
+        screen.draw_scene(start + .7)
+        self.assertEqual(screen.presented["guardian"], "dormant")
+        screen.draw_scene(start + REACT + .01)
+        self.assertIsNone(screen.reaction)
+        self.assertEqual((screen.presented["viewer"], screen.presented["fade"]), (1, 4))
+
+    def test_a_cleared_guardian_steps_aside(self):
+        screen = self.face_guardian()
+        screen.dialogue.complete()
+        self.solve(screen)
+        start = screen.reaction["start"]
+        asides = []
+        for t in (0, .1, .25, .39):
+            screen.draw_scene(start + t)
+            asides.append(screen.presented["aside"])
+        self.assertEqual(asides, sorted(asides))
+        self.assertEqual((asides[0], screen.presented["guardian"]), (0, "cleared"))
+        screen.draw_scene(start + STEP_ASIDE + .05)
+        self.assertEqual(screen.presented["aside"], GUARDIAN_ASIDE)
+
+    # ---------------------------------------------------------------- sound
+
+    def test_the_guardian_blips_as_its_letters_appear(self):
+        screen = self.face_guardian()
+        start = screen.dialogue.start
+        self.sounds.clear()
+        screen._speak(start + .5)
+        screen._speak(start + .5)                     # no new letters, no blip
+        self.assertEqual(self.sounds, ["blip"])
+
+    def test_moves_chests_and_traps_play_their_sounds(self):
+        g = make_combat(Expedition(players=1, seed=42))
+        chest, trap = g.exits()[:2]
+        chest.kind, chest.effect = "treasure", "ward"
+        trap.kind, trap.effect = "trap", "life"
+        self.app.swap(ExpeditionScreen(self.app, g))
+        screen = self.app.screen
+        screen.enter(0)
+        screen.back()
+        screen.enter(1)
+        screen.back()
+        screen.enter(0)                               # a chest only opens on the first visit
+        self.assertEqual(self.sounds, ["door", "chest", "door", "door", "trap", "door", "door"])
+
+    def test_answers_play_correct_or_wrong(self):
+        screen = self.start_seeded()
+        g = screen.game
+        screen.enter(0)
+        self.solve(screen)
+        screen.enter(next(i for i, room in enumerate(g.exits()) if room.kind == "combat"))
+        self.miss(screen)
+        # Reduced motion shows the Guardian's lines at once: one blip for all of them.
+        self.assertEqual(self.sounds, ["door", "blip", "correct", "door", "blip", "wrong"])
+
+    def test_the_hud_mute_toggle_silences_everything_at_once(self):
+        screen = self.face_guardian()
+        self.assertEqual(screen.hud["mute"], ["SOM ●"])
+        self.sounds.clear()
+        self.click(screen, ("mute",))
+        self.assertEqual((self.app.audio.muted, screen.hud["mute"]), (True, ["SOM ○"]))
+        self.assertFalse(screen.dialogue.done(time.monotonic()))   # muting does not skip the Guardian's lines
+        screen._speak(screen.dialogue.start + .5)
+        self.app.effects.set(False)                   # no Guardian reaction holding the next move
+        self.solve(screen)
+        screen.enter(0)
+        self.assertEqual(self.sounds, [None])        # the stop, then silence
+        self.click(screen, ("mute",))
+        self.assertEqual(screen.hud["mute"], ["SOM ●"])
+        self.assertIn("<Alt-m>", [sequence for sequence, _ in screen.nav_bindings])
 
     def test_ambient_particles_live_only_with_effects_and_in_their_room(self):
         screen = self.start_seeded()
