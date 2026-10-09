@@ -4,13 +4,13 @@
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Over many draws, Tier frequencies match each Difficulty's mix within a tolerance
-- [ ] The current Question's Tier is visible on screen
-- [ ] Wrong easy costs a Life; wrong medium skips the next Turn; wrong hard Retreats; timeout behaves like wrong
-- [ ] Skipped Turns are passed over automatically and the skip clears
-- [ ] At 0 Lives the player returns to the Entrance with 3 Lives, Map and Cleared Rooms intact
-- [ ] Every player's Lives are shown and fit the minimum window with four players
-- [ ] The correct answer and the penalty are announced after a miss
-- [ ] Covered by Expedition rules tests and screen tests
+- [x] Over many draws, Tier frequencies match each Difficulty's mix within a tolerance
+- [x] The current Question's Tier is visible on screen
+- [x] Wrong easy costs a Life; wrong medium skips the next Turn; wrong hard Retreats; timeout behaves like wrong
+- [x] Skipped Turns are passed over automatically and the skip clears
+- [x] At 0 Lives the player returns to the Entrance with 3 Lives, Map and Cleared Rooms intact
+- [x] Every player's Lives are shown and fit the minimum window with four players
+- [x] The correct answer and the penalty are announced after a miss
+- [x] Covered by Expedition rules tests and screen tests

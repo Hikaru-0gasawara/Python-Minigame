@@ -22,7 +22,7 @@ MODE_COPY = {
     1: ("01 / DESCOBERTA", "No seu ritmo", "Masmorra pequena e mais tempo para pensar."),
     2: ("02 / DESAFIO", "Mais caminhos", "Mais salas, mais bifurcações e menos tempo."),
     3: ("03 / PRESSÃO", "Tempo é tudo", "A maior masmorra, com o menor tempo por pergunta."),
-    4: ("04 / JORNADA", "Desafio crescente", "As perguntas ficam mais difíceis rumo ao núcleo."),
+    4: ("04 / JORNADA", "Grande e acessível", "Masmorra enorme com perguntas quase sempre fáceis."),
 }
 
 
@@ -182,8 +182,8 @@ class Setup(tk.Frame):
                           highlightbackground=TEAL if selected else LINE,
                           text=f"{'●' if selected else '○'}  {name}\n{MODE_COPY[i][1]}")
         self.mode_description.configure(text=MODE_COPY[value][2])
-        _name, rooms, question = MODES[value]
-        values = ("30 → 15s" if value == 4 else f"{question}s", str(rooms))
+        _name, rooms, question, _tiers = MODES[value]
+        values = (f"{question}s", str(rooms))
         for widget, text in zip(self.stat_values, values):
             widget.configure(text=text)
 
@@ -287,7 +287,7 @@ class Setup(tk.Frame):
         _label(dialog, "CADA RESPOSTA ABRE UM CAMINHO", 16, TEAL).pack(anchor="w", pady=(0, 18))
         for title, detail in (
             ("01  EXPLORE", "Um movimento por turno; seu mapa mostra só o que você descobriu.\nAlt + setas: mover. Alt + Q/E: olhar para os lados."),
-            ("02  RESPONDA", "Cada guardião pergunta a todo jogador que entra na sala.\nDigite a resposta em inglês e pressione Enter, ou recue."),
+            ("02  RESPONDA", "Cada guardião pergunta a todo jogador que entra. Você tem 3 vidas.\nErrar fácil: −1 vida · média: perde a vez · difícil: recua."),
             ("03  ESCAPE PRIMEIRO", "Acerte 3 perguntas do núcleo, uma por turno.\nO primeiro jogador a escapar vence a corrida."),
         ):
             _label(dialog, title, 10, GOLD).pack(anchor="w")

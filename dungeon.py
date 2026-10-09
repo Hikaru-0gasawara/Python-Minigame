@@ -9,15 +9,20 @@ from questions import TIERS, QuestionBank, is_correct
 
 
 EASY, MEDIUM, HARD, CAMPAIGN = 1, 2, 3, 4
-# Difficulty: on-screen name, Rooms, seconds per Question.
+# Difficulty: on-screen name, Rooms, seconds per Question, % of easy/medium/hard Questions.
 MODES = {
-    EASY: ("Aventureiro", 15, 30),
-    MEDIUM: ("Guerreiro", 22, 22),
-    HARD: ("Pesadelo", 30, 15),
-    CAMPAIGN: ("Campanha", 30, 30),
+    EASY: ("Aventureiro", 15, 30, (70, 25, 5)),
+    MEDIUM: ("Guerreiro", 22, 22, (40, 45, 15)),
+    HARD: ("Pesadelo", 30, 15, (15, 40, 45)),
+    CAMPAIGN: ("Campanha", 30, 30, (85, 12, 3)),
 }
 SEED_SPACE = 16 ** 8
 EXIT_HITS = 3
+LIVES = 3
+# A missed easy Question hurts most: the penalty shrinks as the Tier rises.
+PENALTIES = {"easy": "life", "medium": "skip", "hard": "retreat"}
+PENALTY_TEXT = {"life": "−1 vida", "entrance": "sem vidas, de volta à entrada",
+                "skip": "perde a próxima vez", "retreat": "recua uma sala"}
 # Room kind: on-screen name, hint, colour.
 ROOMS = {
     "combat": ("Guardião", "Responda para passar", "#24e5dd"),
@@ -59,6 +64,8 @@ class Player:
     revealed: set = field(default_factory=set)
     cleared: set = field(default_factory=set)
     exit_hits: int = 0
+    lives: int = LIVES
+    skip_next: bool = False
 
 
 def random_seed():
@@ -94,14 +101,15 @@ class Expedition:
 
     Every action belongs to the active player, so nobody can act out of turn.
     A Guardian questions each player who enters until that player Clears it;
-    the first player to answer the Exit's Guardian three times wins.
+    a miss costs a Life, the next Turn or a Retreat depending on the Tier.
+    The first player to answer the Exit's Guardian three times wins.
     """
 
     def __init__(self, difficulty=EASY, players=1, seed=None, clock=time.monotonic):
         if difficulty not in MODES or not 1 <= players <= 4:
             raise ValueError("Invalid difficulty or player count")
         self.difficulty = difficulty
-        self.name, _rooms, self.base_question_time = MODES[difficulty]
+        self.name, _rooms, self.question_time, self.tier_weights = MODES[difficulty]
         self.seed = random_seed() if seed is None else seed
         self.dungeon = generate_dungeon(self.seed, difficulty)
         # Questions use their own stream so play never alters the Dungeon.
@@ -114,6 +122,7 @@ class Expedition:
             self._arrive(player, entrance)
         self.player = 0
         self.question = None
+        self.question_tier = None
         self.question_deadline = 0
         self.question_duration = 0
         self.status = "playing"
@@ -149,6 +158,29 @@ class Expedition:
     def _end_turn(self):
         self.question = None
         self.player = (self.player + 1) % len(self.players)
+        while self.active.skip_next:
+            self.active.skip_next = False
+            self.player = (self.player + 1) % len(self.players)
+
+    def _send_back(self, player):
+        """Retreat without spending a Turn of its own: the penalty already ends it."""
+        if player.came_from is not None:
+            key, player.came_from = player.came_from, player.position
+            self._arrive(player, key)
+
+    def _penalise(self, player, tier):
+        penalty = PENALTIES[tier]
+        if penalty == "life":
+            player.lives -= 1
+            if player.lives <= 0:
+                # Map and Cleared Rooms survive, so the way back is quick.
+                penalty, player.lives, player.came_from = "entrance", LIVES, None
+                self._arrive(player, self.dungeon.entrance_key)
+        elif penalty == "skip":
+            player.skip_next = True
+        else:
+            self._send_back(player)
+        return penalty
 
     def _move(self, key):
         """Arrive in a Room; a Guardian not yet Cleared keeps the Turn going."""
@@ -180,13 +212,10 @@ class Expedition:
     def ask(self):
         if self.status != "playing" or self.question is not None or self.has_cleared(self.current):
             return
-        tier = min(2, self.current.depth * 3 // self.dungeon.rooms[self.dungeon.exit_key].depth)
-        self.question = self.bank.draw(TIERS[tier if self.difficulty == CAMPAIGN else self.difficulty - 1], self.rng)
-        duration = self.base_question_time
-        if self.difficulty == CAMPAIGN:
-            duration = (30, 22, 15)[tier]
-        self.question_duration = duration
-        self.question_deadline = self.clock() + duration
+        self.question_tier = self.rng.choices(TIERS, self.tier_weights)[0]
+        self.question = self.bank.draw(self.question_tier, self.rng)
+        self.question_duration = self.question_time
+        self.question_deadline = self.clock() + self.question_time
 
     def tick(self):
         if self.status == "playing" and self.question is not None and self.question_remaining <= 0:
@@ -199,9 +228,11 @@ class Expedition:
         expired = expired or self.question_remaining <= 0
         question, player, room = self.question, self.active, self.current
         correct = not expired and is_correct(question, answer)
+        penalty = None
         if not correct:
+            penalty = self._penalise(player, self.question_tier)
             reason = "Tempo da pergunta esgotado" if expired else "Resposta incorreta"
-            message = f"{reason}. Resposta: {question['answer']}"
+            message = f"{reason}. Resposta: {question['answer']} · {PENALTY_TEXT[penalty]}"
         elif room.kind == "exit":
             player.exit_hits += 1
             message = f"Núcleo {player.exit_hits}/{EXIT_HITS}"
@@ -213,7 +244,8 @@ class Expedition:
             player.cleared.add(room.key)
             message = "Guardião vencido. Passagem liberada."
         result = {"correct": correct, "expired": expired, "message": message,
-                  "answer": question["answer"], "player": self.player + 1}
+                  "answer": question["answer"], "player": self.player + 1,
+                  "tier": self.question_tier, "penalty": penalty}
         if self.status == "won":
             self.question = None
         else:

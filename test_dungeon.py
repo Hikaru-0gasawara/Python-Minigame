@@ -3,7 +3,7 @@
 import unittest
 from collections import deque
 
-from dungeon import CAMPAIGN, EXIT_HITS, MODES, Expedition, format_seed, generate_dungeon, parse_seed
+from dungeon import CAMPAIGN, EXIT_HITS, LIVES, MODES, Expedition, format_seed, generate_dungeon, parse_seed
 from dungeon_map import CARDINAL_DIRECTIONS, distances
 
 
@@ -14,6 +14,10 @@ class DungeonTests(unittest.TestCase):
 
     def solve(self, game):
         return game.submit(game.question["answer"])
+
+    def miss(self, game, tier="easy"):
+        game.question_tier = tier  # Pin the Tier so the penalty is known.
+        return game.submit("definitely wrong")
 
     def path_to(self, game, target):
         queue = deque([(game.current.key, [])])
@@ -153,14 +157,14 @@ class DungeonTests(unittest.TestCase):
             else:
                 g.ask()
             seen.append(id(g.question))
-            g.submit("definitely wrong")
+            self.miss(g)
         self.assertEqual(len(seen), len(set(seen)))
 
     def test_wrong_answer_ends_the_turn_and_the_player_must_answer_again(self):
         g = self.make_game(players=2)
         g.enter(0)
         room = g.current.key
-        result = g.submit("definitely wrong")
+        result = self.miss(g)
         self.assertFalse(result["correct"])
         self.assertEqual(result["player"], 1)
         self.assertEqual(g.player, 1)
@@ -178,6 +182,7 @@ class DungeonTests(unittest.TestCase):
         g.enter(0)
         self.now = g.question_deadline
         self.assertFalse(g.enter(1))
+        g.question_tier = "easy"
         result = g.tick()
         self.assertFalse(result["correct"])
         self.assertEqual(g.player, 1)
@@ -186,6 +191,7 @@ class DungeonTests(unittest.TestCase):
     def test_late_correct_answer_is_a_timeout(self):
         g = self.make_game()
         g.enter(0)
+        g.question_tier = "easy"
         self.now = g.question_deadline + .01
         self.assertFalse(self.solve(g)["correct"])
         self.assertFalse(g.has_cleared(g.current))
@@ -225,17 +231,86 @@ class DungeonTests(unittest.TestCase):
         self.assertEqual(g.active.visited, set(g.dungeon.rooms) - {g.dungeon.exit_key})
         self.assertEqual(g.status, "playing")
 
-    def test_campaign_difficulty_and_time_progress(self):
-        g = self.make_game(CAMPAIGN)
-        floors = g.dungeon.rooms[g.dungeon.exit_key].depth
-        for depth, seconds, tier in ((1, 30, "easy"), ((floors + 2) // 3, 22, "medium"),
-                                    ((2 * floors + 2) // 3, 15, "hard")):
-            g.active.position = next(room.key for room in g.dungeon.rooms.values()
-                                     if room.depth == depth and room.kind == "combat")
-            g.question = None
-            g.ask()
-            self.assertEqual(g.question_duration, seconds)
-            self.assertIn(g.question, g.bank.tiers[tier])
+    def test_tier_frequencies_follow_each_difficulty(self):
+        for difficulty, (_name, _rooms, seconds, weights) in MODES.items():
+            g = self.make_game(difficulty)
+            g.active.position = next(k for k, r in g.dungeon.rooms.items() if r.kind == "combat")
+            counts = {"easy": 0, "medium": 0, "hard": 0}
+            for _ in range(3000):
+                g.question = None
+                g.ask()
+                counts[g.question_tier] += 1
+                self.assertIn(g.question, g.bank.tiers[g.question_tier])
+                self.assertEqual(g.question_duration, seconds)
+            with self.subTest(difficulty=difficulty):
+                for (tier, count), weight in zip(counts.items(), weights):
+                    self.assertAlmostEqual(count / 3000, weight / 100, delta=.03)
+        campaign, easy = MODES[CAMPAIGN][3], MODES[1][3]
+        self.assertGreater(campaign[0], easy[0])
+
+    def test_missing_easy_costs_a_life_and_keeps_the_player_in_place(self):
+        g = self.make_game(players=2)
+        g.enter(0)
+        room = g.current.key
+        result = self.miss(g, "easy")
+        self.assertEqual((result["tier"], result["penalty"]), ("easy", "life"))
+        self.assertIn("−1 vida", result["message"])
+        self.assertIn(result["answer"], result["message"])
+        self.assertEqual((g.players[0].lives, g.players[0].position, g.player), (LIVES - 1, room, 1))
+
+    def test_missing_medium_skips_the_next_turn_once(self):
+        g = self.make_game(players=2)
+        g.enter(0)
+        self.assertEqual(self.miss(g, "medium")["penalty"], "skip")
+        self.assertTrue(g.players[0].skip_next)
+        self.assertEqual(g.player, 1)
+        g.enter(0)
+        self.solve(g)
+        self.assertEqual(g.player, 1)  # Player 1's Turn was passed over.
+        self.assertFalse(g.players[0].skip_next)
+        g.enter(next(i for i, room in enumerate(g.exits()) if not g.has_cleared(room)))
+        self.solve(g)
+        self.assertEqual(g.player, 0)
+
+    def test_solo_skip_simply_clears(self):
+        g = self.make_game()
+        g.enter(0)
+        self.miss(g, "medium")
+        self.assertEqual(g.player, 0)
+        self.assertFalse(g.active.skip_next)
+
+    def test_missing_hard_retreats_and_ends_the_turn(self):
+        g = self.make_game(players=2)
+        g.enter(0)
+        room = g.current.key
+        self.assertEqual(self.miss(g, "hard")["penalty"], "retreat")
+        self.assertEqual((g.players[0].position, g.players[0].came_from), ((0, 0), room))
+        self.assertEqual((g.players[0].lives, g.player), (LIVES, 1))
+
+    def test_losing_the_last_life_returns_to_the_entrance_with_progress_kept(self):
+        g = self.make_game()
+        g.enter(self.branching_door(g))
+        self.solve(g)
+        cleared, visited = set(g.active.cleared), set(g.active.visited)
+        g.enter(next(i for i, r in enumerate(g.exits()) if not g.has_cleared(r)))
+        for life in range(LIVES - 1, -1, -1):
+            result = self.miss(g, "easy")
+            if life:
+                self.assertEqual(g.active.lives, life)
+                g.ask()
+        self.assertEqual(result["penalty"], "entrance")
+        self.assertEqual((g.active.position, g.active.lives, g.active.came_from), ((0, 0), LIVES, None))
+        self.assertLessEqual(cleared, g.active.cleared)
+        self.assertLessEqual(visited, g.active.visited)
+        self.assertFalse(g.retreat())
+
+    def test_timeout_applies_the_tier_penalty(self):
+        g = self.make_game(players=2)
+        g.enter(0)
+        g.question_tier = "medium"
+        self.now = g.question_deadline
+        self.assertEqual(g.tick()["penalty"], "skip")
+        self.assertTrue(g.players[0].skip_next)
 
     def test_exit_needs_three_hits_across_turns_and_progress_survives_leaving(self):
         g = self.make_game()
@@ -269,7 +344,7 @@ class DungeonTests(unittest.TestCase):
             if g.player == 1:
                 self.solve(g)
             else:
-                g.submit("definitely wrong")
+                self.miss(g)
             if g.status == "won":
                 break
         self.assertEqual((g.winner, g.players[1].exit_hits, g.players[0].exit_hits), (1, EXIT_HITS, 0))

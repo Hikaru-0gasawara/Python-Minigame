@@ -251,12 +251,33 @@ class DungeonUITests(unittest.TestCase):
             self.assertEqual(screen.challenge.cget("highlightbackground"), PLAYER_COLORS[player])
             self.assertEqual(screen.submit_btn.cget("bg"), PLAYER_COLORS[player])
             self.assertIn(f"JOGADOR {player+1}", screen.player_badge.itemcget("active_player", "text"))
+            g.question_tier = "easy"  # A medium miss would skip this player's next Turn.
             screen.answer.insert(0, "definitely not a valid answer")
             screen.submit()
             self.assertTrue(screen.feedback.cget("text").startswith(f"J{player+1} ·"))
             self.assertEqual(g.player, (player+1) % 4)
             screen.refresh()
         self.assertEqual(screen.game.player, 0)
+
+    def test_tier_lives_and_penalties_are_shown(self):
+        screen = self.start_seeded(players=2)
+        g = screen.game
+        screen.enter(0)
+        g.question_tier = "medium"
+        self.pump()
+        self.assertIn("MÉDIA · ERRO: PERDE A PRÓXIMA VEZ", screen.q_meta.cget("text"))
+        self.assertIn("J1 ♥♥♥", screen.stats.cget("text"))
+        g.question_tier = "easy"
+        answer = g.question["answer"]
+        screen.answer.insert(0, "definitely wrong")
+        screen.submit()
+        self.assertIn(f"Resposta: {answer} · −1 vida", screen.feedback.cget("text"))
+        self.assertIn("♥♥♡", screen.player_cards[0][1].cget("text"))
+        screen.enter(0)
+        g.question_tier = "medium"
+        screen.answer.insert(0, "definitely wrong")
+        screen.submit()
+        self.assertIn("PULA", screen.player_cards[1][1].cget("text"))
 
     def test_correct_answer_credits_the_answerer_and_highlights_next(self):
         screen = self.start_seeded(players=2)

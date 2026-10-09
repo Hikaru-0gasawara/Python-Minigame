@@ -5,7 +5,7 @@ import random
 import time
 import tkinter as tk
 
-from dungeon import EXIT_HITS, Expedition, ROOMS, format_seed
+from dungeon import EXIT_HITS, LIVES, PENALTIES, PENALTY_TEXT, Expedition, ROOMS, format_seed
 from menu_ui import Setup
 from room_scene import RoomScene, DOOR_BOUNDS
 from motion import CanvasVeil, smooth, blend
@@ -26,6 +26,11 @@ PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
 COMPASS = (("N", "NORTE", (0, -1)), ("L", "LESTE", (1, 0)),
            ("S", "SUL", (0, 1)), ("O", "OESTE", (-1, 0)))
 SYMBOLS = {"entrance": "E", "combat": "?", "exit": "X"}
+TIER_NAMES = {"easy": "FÁCIL", "medium": "MÉDIA", "hard": "DIFÍCIL"}
+
+
+def hearts(player):
+    return "♥" * player.lives + "♡" * (LIVES - player.lives)
 
 
 def label(parent, text="", size=11, color=TEXT, **kwargs):
@@ -329,7 +334,7 @@ class ExpeditionScreen(tk.Frame):
         self.feedback.configure(text=(f"J{author} · " if author else "") + result["message"],
                                 fg=PLAYER_COLORS[author-1] if good and author else RED)
         self.resume_at = time.monotonic() + (1.3 if good else 3.0)
-        caption = f"J{author}  ✓" if good else "TEMPO ESGOTADO" if result["expired"] else "ERROU"
+        caption = f"J{author}  ✓" if good else PENALTY_TEXT[result["penalty"]].upper()
         self.popups.append([caption,
                             .5, .42, 1.6, PLAYER_COLORS[author-1] if good and author else RED])
         if good and self.app.effects.get():
@@ -395,7 +400,7 @@ class ExpeditionScreen(tk.Frame):
             self._active_player = active
             self.turn_changed_at = now
         color = PLAYER_COLORS[g.player if playing else g.winner]
-        state = (active, tuple((p.position, p.exit_hits) for p in g.players), g.status)
+        state = (active, tuple((p.position, p.exit_hits, p.lives, p.skip_next) for p in g.players), g.status)
         if state != self._player_state:
             self._player_state = state
             self.challenge.configure(highlightbackground=color)
@@ -405,10 +410,11 @@ class ExpeditionScreen(tk.Frame):
                 selected = i == active
                 card.configure(highlightbackground=PLAYER_COLORS[i] if selected else "#294048",
                                bg="#193038" if selected else BG)
-                tag = '• SUA VEZ' if selected else '★ ESCAPOU' if i == g.winner else '· ESPERA'
-                name.configure(text=f"J{i+1}  {tag}", bg=card.cget("bg"),
-                               fg=PLAYER_COLORS[i] if selected or i == g.winner else MUTED)
                 player = g.players[i]
+                tag = ('• SUA VEZ' if selected else '★ ESCAPOU' if i == g.winner
+                       else '⏸ PULA' if player.skip_next else '· ESPERA')
+                name.configure(text=f"J{i+1} {hearts(player)}  {tag}", bg=card.cget("bg"),
+                               fg=PLAYER_COLORS[i] if selected or i == g.winner else MUTED)
                 status.configure(text=f"PROF. {g.dungeon.rooms[player.position].depth}"
                                  f"  ·  X {player.exit_hits}/{EXIT_HITS}", bg=card.cget("bg"))
         c = self.player_badge
@@ -582,10 +588,13 @@ class ExpeditionScreen(tk.Frame):
             self.game.ask()
             self.refresh()
         g = self.game
-        self.stats.configure(text=g.name.upper())
+        self.stats.configure(text=f"J{g.player+1} {hearts(g.active)}  /  {g.name.upper()}" if g.status == "playing"
+                             else g.name.upper())
         self.update_players(now)
         qleft = g.question_remaining if g.question else 0
-        meta = (f"JOGADOR {g.player+1} · SUA VEZ  /  {math.ceil(qleft)}s PARA RESPONDER" if g.question else
+        miss = PENALTY_TEXT[PENALTIES[g.question_tier]].upper() if g.question else ""
+        meta = (f"JOGADOR {g.player+1}  /  {TIER_NAMES.get(g.question_tier)} · ERRO: {miss}  /  "
+                f"{math.ceil(qleft)}s" if g.question else
                 f"JOGADOR {g.player+1} · ESCOLHA SUA ROTA" if g.has_cleared(g.current) else
                 f"JOGADOR {g.player+1} · RESPONDA OU RECUE") if g.status == "playing" else "FIM DA CORRIDA"
         if g.current.kind == "exit" and g.status == "playing":
