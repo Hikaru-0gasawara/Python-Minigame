@@ -18,9 +18,8 @@ NEAR_X, NEAR_Y = 160, 105         # half-extents of the room at the screen edge
 BACK = .4                         # scale of the back wall
 BX0, BX1 = int(CX - NEAR_X * BACK), int(CX + NEAR_X * BACK)
 BY0, BY1 = int(CY - NEAR_Y * BACK), int(CY + NEAR_Y * BACK)
-# Native-pixel regions the player can click, in portal order: left, back, right, behind.
+# Native-pixel region of the back door; side doors take theirs from their sprites.
 BACK_DOOR = (136, BY1 - 72, 183, BY1 - 1)
-BEHIND_DOOR = (128, 186, 191, 199)
 GUARDIAN_AT = (136, 71)           # the statue stands in front of the back door
 GUARDIAN_ASIDE = 58               # how far a Cleared Guardian steps to the side
 SIDE_DOOR_U, SIDE_DOOR_V = (70, 150), (-55, 105)

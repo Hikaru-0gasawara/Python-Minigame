@@ -13,13 +13,13 @@ Retreat and the use of a held Buff move onto the active card, by click and by Al
 
 **Blocked by:** 01, 02.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The whole window is the scene; the scale is the largest integer that fits and the rest is black
-- [ ] The minimap shows only the active player's Map and switches each Turn
-- [ ] Four player cards fit at the minimum window; the active card is clearly marked
-- [ ] Typing, Backspace and Enter answer Questions; accents work; no Tk Entry remains
-- [ ] Retreat and Hex/Swap targets work from the active card by click and shortcut
-- [ ] Door clicks, Alt + arrows, edge arrows and Alt + Q/E all work
-- [ ] Announcements and the Seed are visible in pixel text
-- [ ] Screen tests adapted: scaling, HUD fit, input, movement, turn switch, callback cleanup
+- [x] The whole window is the scene; the scale is the largest integer that fits and the rest is black
+- [x] The minimap shows only the active player's Map and switches each Turn
+- [x] Four player cards fit at the minimum window; the active card is clearly marked
+- [x] Typing, Backspace and Enter answer Questions; accents work; no Tk Entry remains
+- [x] Retreat and Hex/Swap targets work from the active card by click and shortcut
+- [x] Door clicks, Alt + arrows, edge arrows and Alt + Q/E all work
+- [x] Announcements and the Seed are visible in pixel text
+- [x] Screen tests adapted: scaling, HUD fit, input, movement, turn switch, callback cleanup

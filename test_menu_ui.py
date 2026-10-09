@@ -41,7 +41,7 @@ class MenuTests(unittest.TestCase):
         self.app.update()
         screen = self.app.screen
         self.assertEqual(screen.game.seed, 0x3F9A12C0)
-        self.assertIn("SEED 3F9A-12C0", screen.map_title.cget("text"))
+        self.assertIn("3F9A-12C0", screen.hud["map"])
         self.app.show_setup()
         self.app.update()
         self.app.screen.seed.set("not a seed")

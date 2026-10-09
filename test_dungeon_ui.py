@@ -1,11 +1,15 @@
-"""Tk integration checks. Requires an available Tk display."""
+"""Tk integration checks for the full-window pixel screen. Requires a Tk display."""
 
+import json
+from pathlib import Path
 import unittest
 from types import SimpleNamespace
 
+import font
+import hud
 from dungeon import EXIT_HITS, Expedition
 from test_dungeon import make_combat
-from dungeon_ui import DungeonApp, ExpeditionScreen, PORTALS, PLAYER_COLORS, ResultsScreen
+from dungeon_ui import ALT_MASK, DungeonApp, ExpeditionScreen, PORTALS, PLAYER_COLORS, ResultsScreen
 
 
 class DungeonUITests(unittest.TestCase):
@@ -31,10 +35,26 @@ class DungeonUITests(unittest.TestCase):
         self.app.update()
         return self.app.screen
 
+    def key(self, screen, char="", keysym=None, state=0):
+        return screen.on_key(SimpleNamespace(char=char, keysym=keysym or char, state=state))
+
+    def type(self, screen, text):
+        for ch in text:
+            self.key(screen, ch, "space" if ch == " " else ch)
+
     def solve(self, screen):
-        screen.answer.insert(0, screen.game.question["answer"])
-        screen.submit()
+        self.type(screen, screen.game.question["answer"])
+        self.key(screen, "\r", "Return")
         self.app.update()
+
+    def miss(self, screen, tier="easy"):
+        screen.game.question_tier = tier  # Pin the Tier so the penalty is known.
+        self.type(screen, "definitely wrong")
+        self.key(screen, "\r", "Return")
+
+    def click(self, screen, action):
+        x, y = screen.region_centre(action)
+        screen.click(SimpleNamespace(x=x, y=y))
 
     def win(self, screen):
         """Put the active racer one Room from the Exit with one hit left, then finish."""
@@ -47,6 +67,53 @@ class DungeonUITests(unittest.TestCase):
         screen.enter([room.key for room in g.exits()].index(exit_key))
         self.solve(screen)
 
+    # ---------------------------------------------------------------- the frame
+
+    def test_frame_fills_the_window_at_an_integer_scale_with_black_bars(self):
+        screen = self.start_seeded()
+        view = screen.renderer
+        self.assertEqual(view.scale, 3)
+        self.assertEqual((view.display.width(), view.display.height()), (960, 600))
+        self.assertEqual(view.origin, ((screen.canvas.winfo_width() - 960) // 2,
+                                       (screen.canvas.winfo_height() - 600) // 2))
+        self.app.geometry("1300x900+20000+20000")
+        self.app.update()
+        screen.refresh()
+        self.assertEqual(view.scale, 4)
+        self.assertEqual(view.display.width(), 1280)
+
+    def test_every_hud_piece_stays_inside_the_frame_with_four_players(self):
+        screen = self.start_seeded(players=4)
+        screen.enter(0)
+        for name, (_key, piece, _photo) in screen._layers.items():
+            with self.subTest(piece=name):
+                self.assertGreaterEqual(piece.x, 0)
+                self.assertLessEqual(piece.x + piece.pix.w, hud.W)
+                self.assertGreaterEqual(piece.y, 0)
+                self.assertLessEqual(piece.y + piece.pix.h, hud.H)
+        narrow = (hud.W - 4 - 112 - 3 * 3) // 3
+        for i, lines in enumerate(screen.hud["cards"]):
+            limit = 112 - 8 if i == screen.game.player else narrow - 8
+            self.assertTrue(all(font.measure(line) <= limit for line in lines), lines)
+
+    def test_every_question_in_the_bank_fits_the_box_and_long_ones_are_capped(self):
+        root = Path(__file__).parent
+        for tier in ("easy", "medium", "hard"):
+            for q in json.loads((root / f"{tier}_questions.json").read_text(encoding="utf-8")):
+                self.assertLessEqual(len(font.wrap(q["question"], hud.BOX_WIDTH - 8)), 2, q["question"])
+        screen = self.start_seeded(players=4)
+        screen.enter(0)
+        screen.game.question = {"question": "Which discovery changed the way we understand the universe, "
+                                            "and which scientist presented the explanation? " * 4,
+                                "answer": "example"}
+        screen.refresh()
+        self.assertEqual(len(screen.hud["box"]), 1 + hud.MAX_QUESTION_LINES + 1)
+        self.assertTrue(screen.hud["box"][hud.MAX_QUESTION_LINES].endswith("…"))
+        badge_bottom = screen._layers["badge"][1].y + screen._layers["badge"][1].pix.h
+        self.assertGreater(screen.box_rect[1], badge_bottom)
+
+    # ---------------------------------------------------------------- movement
+
     def test_portals_match_compass_and_missing_doors_are_walls(self):
         screen = self.start_seeded()
         g = screen.game
@@ -55,15 +122,13 @@ class DungeonUITests(unittest.TestCase):
             g.active.position = room.key
             g.active.cleared.add(room.key)
             screen.refresh()
-            self.app.update()
             for portal, (_, _, (dx, dy)) in enumerate(PORTALS):
                 target = (room.x + dx, room.y + dy)
                 exists = target in g.dungeon.connections[room.key]
-                self.assertEqual(str(screen.door_buttons[portal].cget("state")),
-                                 "normal" if exists else "disabled")
+                self.assertEqual(screen.door_label(portal) is not None, exists)
                 bounds = screen.door_bounds()[portal]
-                event = SimpleNamespace(x=(bounds[0]+bounds[2])/2*screen.scene.winfo_width(),
-                                        y=(bounds[1]+bounds[3])/2*screen.scene.winfo_height())
+                event = SimpleNamespace(x=(bounds[0]+bounds[2])/2*screen.canvas.winfo_width(),
+                                        y=(bounds[1]+bounds[3])/2*screen.canvas.winfo_height())
                 self.assertEqual(screen.door_at(event), portal if exists else None)
                 if exists:
                     self.assertEqual(g.exits()[screen.portal_targets()[portal]].key, target)
@@ -71,21 +136,39 @@ class DungeonUITests(unittest.TestCase):
                     screen.navigate(portal)
                     self.assertEqual(g.current.key, room.key)
 
+    def test_edge_arrows_look_and_the_card_retreats(self):
+        screen = self.start_seeded()
+        g = screen.game
+        self.click(screen, ("look", 1))
+        self.assertEqual(screen.facing, 1)
+        self.click(screen, ("look", -1))
+        self.assertEqual(screen.facing, 0)
+        self.assertIsNone(screen.region_centre(("retreat",)))
+        screen.enter(0)
+        self.click(screen, ("retreat",))
+        self.assertEqual(g.current.key, (0, 0))
+
+    def test_hovering_a_door_says_what_lies_behind_it(self):
+        screen = self.start_seeded()
+        portal = next(p for p in range(4) if screen.door_label(p))
+        screen.hover = portal
+        screen.refresh()
+        self.assertEqual(screen.hud["box"][0], screen.door_label(portal))
+
     def test_map_only_shows_discovered_passages_and_clicks_adjacent_rooms(self):
         screen = self.start_seeded()
         g = screen.game
         initial = g.current.key
         me = g.active
         self.assertEqual(set(screen.map_positions), me.revealed)
-        self.assertEqual(len(screen.map.find_withtag("room")), len(me.revealed))
-        expected = sum(1 for k in me.revealed for n in g.dungeon.connections[k]
-                       if k < n and n in me.revealed and (k in me.visited or n in me.visited))
-        self.assertEqual(len(screen.map.find_withtag("corridor")), expected)
+        self.assertEqual(set(screen.map_kinds), me.revealed)
+        expected = {(k, n) for k in me.revealed for n in g.dungeon.connections[k]
+                    if k < n and n in me.revealed and (k in me.visited or n in me.visited)}
+        self.assertEqual(screen.map_corridors, expected)
         room = g.exits()[0]
         x, y = screen.map_positions[room.key]
         screen.map_click(SimpleNamespace(x=x, y=y))
         self.assertEqual(g.current.key, room.key)
-        self.app.update()
         x, y = screen.map_positions[initial]
         screen.map_click(SimpleNamespace(x=x, y=y))
         self.assertEqual(g.current.key, room.key)  # Cannot flee an active quiz.
@@ -100,12 +183,12 @@ class DungeonUITests(unittest.TestCase):
         g = screen.game
         screen.enter(next(i for i, room in enumerate(g.exits()) if len(g.dungeon.connections[room.key]) > 1))
         self.solve(screen)
-        first = g.players[0]
         self.assertEqual(g.player, 1)
         self.assertEqual(set(screen.map_positions), g.players[1].revealed)
-        self.assertNotEqual(first.revealed, g.players[1].revealed)
-        self.assertEqual(len(screen.map.find_withtag("rival")), 2)
-        self.assertIn("PLANTA J2", screen.map_title.cget("text"))
+        self.assertNotEqual(g.players[0].revealed, g.players[1].revealed)
+        self.assertEqual([i for i, _ in screen.map_rivals], [0, 2])
+        self.assertTrue(screen.hud["badge"][0].startswith("J2"))
+        self.assertIn("0000-002A", screen.hud["map"])
 
     def test_shortcuts_are_removed_and_rebound_when_restarting(self):
         screen = self.start_seeded()
@@ -119,32 +202,28 @@ class DungeonUITests(unittest.TestCase):
         for sequence, binding in new.nav_bindings:
             self.assertIn(binding, self.app.bind(sequence))
 
-    def test_long_question_keeps_controls_inside_minimum_window(self):
-        screen = self.start_seeded(players=4)
-        screen.enter(0)
-        screen.game.question = {"question": "Which discovery changed the way we understand the universe, "
-                               "and which scientist presented the explanation? " * 3,
-                               "answer": "example"}
-        screen.refresh()
-        self.app.update()
-        for widget in (screen.q_text, screen.answer, screen.submit_btn, screen.feedback,
-                       *screen.door_buttons):
-            with self.subTest(widget=str(widget)):
-                self.assertTrue(widget.winfo_ismapped())
-                self.assertGreaterEqual(widget.winfo_height(), widget.winfo_reqheight())
-                self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(),
-                                     self.app.winfo_rooty() + self.app.winfo_height())
+    # ---------------------------------------------------------------- typing answers
 
-    def test_four_player_controls_fit_minimum_window(self):
-        self.app.start(1, 4)
-        self.app.update()
-        screen = self.app.screen
-        for widget in screen.map.master.winfo_children():
-            self.assertTrue(widget.winfo_ismapped())
-            self.assertGreaterEqual(widget.winfo_height(), widget.winfo_reqheight())
-        for widget in (screen.answer, screen.submit_btn, screen.feedback):
-            bottom = widget.winfo_rooty() + widget.winfo_height()
-            self.assertLessEqual(bottom, self.app.winfo_rooty() + self.app.winfo_height())
+    def test_typing_backspace_and_enter_answer_the_question(self):
+        screen = self.start_seeded()
+        g = screen.game
+        self.type(screen, "ação")
+        self.assertEqual(screen.typed, "")                      # nothing to answer yet
+        screen.enter(0)
+        self.type(screen, "ação 1")
+        self.assertEqual(screen.typed, "ação 1")
+        self.assertTrue(screen.hud["box"][-1].startswith("> ação 1"))
+        self.key(screen, "", "BackSpace")
+        self.assertEqual(screen.typed, "ação ")
+        self.key(screen, "x", "x", state=ALT_MASK)               # Alt chords are shortcuts
+        self.assertEqual(screen.typed, "ação ")
+        self.type(screen, "w" * 80)
+        self.assertLessEqual(font.measure(f"> {screen.typed}_"), hud.BOX_WIDTH - 8)
+        for _ in screen.typed:
+            self.key(screen, "", "BackSpace")
+        self.solve(screen)
+        self.assertTrue(g.has_cleared(g.current))
+        self.assertEqual(screen.typed, "")
 
     def test_submission_retry_and_restart_cancel_callbacks(self):
         screen = self.start_seeded()
@@ -171,14 +250,14 @@ class DungeonUITests(unittest.TestCase):
         self.pump()
         self.assertTrue(screen.finished)
         self.assertEqual((screen.game.status, screen.game.winner), ("won", 0))
-        self.assertEqual(str(screen.submit_btn.cget("state")), "disabled")
-        self.assertEqual(str(screen.back_btn.cget("state")), "disabled")
-        self.assertIn("escapou", screen.q_text.cget("text"))
+        self.assertIsNone(self.key(screen, "a"))
+        self.assertEqual(screen.regions, [])
+        self.assertIn("escapou", screen.hud["box"][0])
 
     def test_looking_rotates_portals_without_moving_or_erasing_answer(self):
         screen = self.start_seeded()
         screen.enter(0)
-        screen.answer.insert(0, "my unfinished answer")
+        self.type(screen, "my unfinished answer")
         g = screen.game
         position, question, deadline = g.current.key, g.question, g.question_deadline
         for facing in (1, 2, 3, 0):
@@ -187,11 +266,13 @@ class DungeonUITests(unittest.TestCase):
             self.assertEqual(g.current.key, position)
             self.assertIs(g.question, question)
             self.assertEqual(g.question_deadline, deadline)
-            self.assertEqual(screen.answer.get(), "my unfinished answer")
+            self.assertEqual(screen.typed, "my unfinished answer")
             for i, (_, _, (dx, dy)) in enumerate(screen.relative_portals()):
                 target = screen.portal_targets()[i]
                 if target is not None:
                     self.assertEqual(g.exits()[target].key, (g.current.x+dx, g.current.y+dy))
+
+    # ---------------------------------------------------------------- transitions
 
     def test_door_and_walk_transition_only_enters_once_at_arrival(self):
         screen = self.start_seeded()
@@ -240,65 +321,62 @@ class DungeonUITests(unittest.TestCase):
         self.assertIsNone(screen.transition)
         self.assertEqual((g.player, g.players[0].position), (1, room))
 
+    # ---------------------------------------------------------------- players and HUD texts
+
+    def active_cards(self, screen):
+        return [i for i, lines in enumerate(screen.hud["cards"]) if "SUA VEZ" in lines[0]]
+
     def test_player_identity_tracks_full_rotation_and_result_author(self):
         screen = self.start_seeded(players=4)
+        g = screen.game
         for player in range(4):
-            g = screen.game
             screen.enter(0)
             self.assertEqual(g.player, player)
-            card_names = [str(name.cget("text")) for _, name, _ in screen.player_cards]
-            self.assertEqual(sum("SUA VEZ" in name for name in card_names), 1)
-            self.assertIn("SUA VEZ", card_names[player])
-            self.assertEqual(screen.challenge.cget("highlightbackground"), PLAYER_COLORS[player])
-            self.assertEqual(screen.submit_btn.cget("bg"), PLAYER_COLORS[player])
-            self.assertIn(f"JOGADOR {player+1}", screen.player_badge.itemcget("active_player", "text"))
-            g.question_tier = "easy"  # A medium miss would skip this player's next Turn.
-            screen.answer.insert(0, "definitely not a valid answer")
-            screen.submit()
-            self.assertTrue(screen.feedback.cget("text").startswith(f"J{player+1} ·"))
+            self.assertEqual(self.active_cards(screen), [player])
+            self.assertTrue(screen.hud["badge"][0].startswith(f"J{player+1} · SUA VEZ"))
+            self.assertTrue(screen.hud["box"][0].startswith(f"J{player+1} ·"))
+            self.miss(screen)  # An easy miss: a medium one would skip this player's next Turn.
+            self.assertTrue(screen.message.startswith(f"J{player+1} ·"))
             self.assertEqual(g.player, (player+1) % 4)
-            screen.refresh()
         self.assertEqual(screen.game.player, 0)
 
     def test_unvisited_rooms_are_silhouettes_and_chests_hide_mimics(self):
-        screen = self.start_seeded()
-        g = screen.game
+        g = make_combat(Expedition(players=1, seed=42))
         doors = g.exits()
         doors[0].kind, doors[0].effect = "mimic", "life"
         doors[1].kind = "trap"
-        screen.refresh()
-        kinds = {screen.map.gettags(item)[-1] for item in screen.map.find_withtag("room")}
-        self.assertEqual(kinds - {"kind:entrance"}, {"kind:treasure", "kind:unknown"})
-        labels = [b.cget("text") for b in screen.door_buttons]
+        self.app.swap(ExpeditionScreen(self.app, g))
+        self.app.update()
+        screen = self.app.screen
+        self.assertEqual(set(screen.map_kinds.values()) - {"entrance"}, {"treasure", "unknown"})
+        labels = [screen.door_label(p) for p in range(4) if screen.door_label(p)]
         self.assertTrue(any("Tesouro" in text for text in labels))
         self.assertTrue(any("Desconhecida" in text for text in labels))
         self.assertFalse(any("Mímico" in text or "Armadilha" in text for text in labels))
         screen.enter(0)
-        self.assertIn("J1 · −1 vida", screen.feedback.cget("text"))
-        self.assertIn("MÍMICO", screen.room_title.cget("text"))
+        self.assertIn("J1 · −1 vida", screen.message)
+        self.assertTrue(screen.hud["badge"][1].startswith("MÍMICO"))
 
     def test_held_buffs_show_on_cards_and_targets_are_opponents_only(self):
         screen = self.start_seeded(players=3)
         g = screen.game
-        self.assertIn("sem poder", screen.player_cards[0][2].cget("text"))
-        self.assertTrue(all(str(b.cget("state")) == "disabled" for b in screen.target_buttons))
+        self.assertIsNone(screen.region_centre(("buff", 1)))
         g.players[0].held, g.players[2].held = "swap", "ward"
         screen.refresh()
-        self.assertIn("TROCA", screen.player_cards[0][2].cget("text"))
-        self.assertIn("ESCUDO", screen.player_cards[2][2].cget("text"))
-        self.assertEqual([str(b.cget("state")) for b in screen.target_buttons], ["disabled", "normal", "normal"])
+        self.assertIn("◆ TROCA", screen.hud["cards"][0][-1])
+        self.assertIn("◆", screen.hud["cards"][2][0])
+        self.assertIsNone(screen.region_centre(("buff", 0)))
+        self.assertIsNotNone(screen.region_centre(("buff", 1)))
         target = g.players[2].position = g.exits()[0].key
-        screen.target_buttons[2].invoke()
+        self.click(screen, ("buff", 2))
         self.assertEqual(g.players[0].position, target)
-        self.assertIn("J1 · Trocou de lugar com J3", screen.feedback.cget("text"))
+        self.assertIn("J1 · Trocou de lugar com J3", screen.message)
 
     def test_a_player_left_before_a_guardian_is_asked_at_the_start_of_their_turn(self):
         screen = self.start_seeded(players=2)
         g = screen.game
         screen.enter(0)
-        g.question_tier = "easy"
-        screen.answer.insert(0, "definitely wrong")
-        screen.submit()
+        self.miss(screen)
         screen.resume_at = 0
         neighbour = g.exits()[0]
         g.active.cleared.add(neighbour.key)
@@ -306,6 +384,48 @@ class DungeonUITests(unittest.TestCase):
         self.assertEqual((g.player, g.question), (0, None))
         self.pump()
         self.assertIsNotNone(g.question)
+
+    def test_tier_lives_and_penalties_are_shown(self):
+        screen = self.start_seeded(players=2)
+        g = screen.game
+        screen.enter(0)
+        g.question_tier = "medium"
+        self.pump()
+        self.assertIn("MÉDIA · ERRO: PERDE A PRÓXIMA VEZ", screen.hud["box"][0])
+        self.assertIn("J1 ♥♥♥", screen.hud["cards"][0][0])
+        answer = g.question["answer"]
+        self.miss(screen, "easy")
+        self.assertIn(f"Resposta: {answer} · −1 vida", screen.message)
+        self.assertIn("♥♥♡", screen.hud["cards"][0][0])
+        screen.enter(0)
+        self.miss(screen, "medium")
+        self.assertIn("⏸", screen.hud["cards"][1][0])
+
+    def test_correct_answer_credits_the_answerer_and_highlights_next(self):
+        screen = self.start_seeded(players=2)
+        screen.enter(0)
+        self.solve(screen)
+        self.assertIn(screen.game.players[0].position, screen.game.players[0].cleared)
+        self.assertIn("J1", screen.message)
+        self.assertTrue(screen.hud["badge"][0].startswith("J2"))
+        self.assertEqual(self.active_cards(screen), [1])
+        self.assertEqual(screen.typed, "")
+
+    def test_timeout_rotates_identity_and_finished_run_has_no_active_player(self):
+        screen = self.start_seeded(players=2)
+        screen.enter(0)
+        screen.game.question_deadline = screen.game.clock() - 1
+        self.pump()
+        self.assertEqual(screen.game.player, 1)
+        self.assertEqual(self.active_cards(screen), [1])
+        self.win(screen)
+        self.pump()
+        self.assertIsNone(screen._active_player)
+        self.assertEqual(self.active_cards(screen), [])
+        self.assertIn("★", screen.hud["cards"][1][0])
+        self.assertEqual(screen.hud["badge"][0], "J2 VENCEU")
+
+    # ---------------------------------------------------------------- results
 
     def finish_and_show_results(self, players=2):
         screen = self.start_seeded(players=players)
@@ -343,50 +463,6 @@ class DungeonUITests(unittest.TestCase):
         self.app.show_setup()
         self.app.update()
         self.assertNotIn(pending, self.app.tk.call("after", "info"))
-
-    def test_tier_lives_and_penalties_are_shown(self):
-        screen = self.start_seeded(players=2)
-        g = screen.game
-        screen.enter(0)
-        g.question_tier = "medium"
-        self.pump()
-        self.assertIn("MÉDIA · ERRO: PERDE A PRÓXIMA VEZ", screen.q_meta.cget("text"))
-        self.assertIn("J1 ♥♥♥", screen.stats.cget("text"))
-        g.question_tier = "easy"
-        answer = g.question["answer"]
-        screen.answer.insert(0, "definitely wrong")
-        screen.submit()
-        self.assertIn(f"Resposta: {answer} · −1 vida", screen.feedback.cget("text"))
-        self.assertIn("♥♥♡", screen.player_cards[0][1].cget("text"))
-        screen.enter(0)
-        g.question_tier = "medium"
-        screen.answer.insert(0, "definitely wrong")
-        screen.submit()
-        self.assertIn("PULA", screen.player_cards[1][1].cget("text"))
-
-    def test_correct_answer_credits_the_answerer_and_highlights_next(self):
-        screen = self.start_seeded(players=2)
-        screen.enter(0)
-        self.solve(screen)
-        self.assertIn(screen.game.players[0].position, screen.game.players[0].cleared)
-        self.assertIn("J1", screen.feedback.cget("text"))
-        self.assertIn("JOGADOR 2", screen.player_badge.itemcget("active_player", "text"))
-        self.assertIn("SUA VEZ", screen.player_cards[1][1].cget("text"))
-        self.assertEqual(screen.answer.get(), "")
-
-    def test_timeout_rotates_identity_and_finished_run_has_no_active_player(self):
-        screen = self.start_seeded(players=2)
-        screen.enter(0)
-        screen.game.question_deadline = screen.game.clock() - 1
-        self.pump()
-        self.assertEqual(screen.game.player, 1)
-        self.assertIn("SUA VEZ", screen.player_cards[1][1].cget("text"))
-        self.win(screen)
-        self.pump()
-        self.assertIsNone(screen._active_player)
-        self.assertFalse(any("SUA VEZ" in name.cget("text") for _, name, _ in screen.player_cards))
-        self.assertIn("ESCAPOU", screen.player_cards[1][1].cget("text"))
-        self.assertEqual(screen.player_badge.itemcget("active_player", "text"), "JOGADOR 2 VENCEU")
 
 
 if __name__ == "__main__":

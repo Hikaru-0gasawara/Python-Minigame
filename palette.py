@@ -1,11 +1,11 @@
 """The game's 32 colours, per-Sector ramps and ordered dithering."""
 
-# Concrete ramp, rust, amber, toxic green, alarm red, ECO cyan, violet.
+# Concrete ramp, rust, amber, toxic green, alarm red, ECO cyan, and a light violet for player 3.
 PALETTE = (
     "07090d", "0d1219", "141c25", "1c2833", "263744", "33495a", "46606f", "5d7a85",
     "7f9aa0", "a9bfc0", "d8e4e0", "2b1712", "4a2418", "73361f", "a2522a", "cc7a3a",
     "e3a857", "f4d38a", "12261c", "1f4a2e", "3f8a45", "8fd16a", "3a0c12", "6e1420",
-    "b3202c", "ff4a4a", "0b3b45", "0f6b78", "19b3c2", "6ff3f0", "e0fffd", "5a3a7a",
+    "b3202c", "ff4a4a", "0b3b45", "0f6b78", "19b3c2", "6ff3f0", "e0fffd", "b08cff",
 )
 RGB = tuple(tuple(int(c[i:i+2], 16) for i in (0, 2, 4)) for c in PALETTE)
 BAYER = ((0, 8, 2, 10), (12, 4, 14, 6), (3, 11, 1, 9), (15, 7, 13, 5))

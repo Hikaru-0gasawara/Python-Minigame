@@ -6,8 +6,9 @@ Python only computes pixels when a room or sprite is first built.
 
 import tkinter as tk
 
+from palette import hex_color
 from pixels import png
-from room_art import (BACK_DOOR, BEHIND_DOOR, GUARDIAN_ASIDE, GUARDIAN_AT, H, W,
+from room_art import (BACK_DOOR, GUARDIAN_ASIDE, GUARDIAN_AT, H, W,
                       back_door, build_background, fade_veil, guardian, side_door)
 
 
@@ -22,8 +23,8 @@ class PixelView:
         self._photos = {}
         left = side_door("shallow", "left", False).bbox()
         right = side_door("shallow", "right", False).bbox()
-        # Native click regions in portal order: left, ahead, right, behind.
-        self.regions = (left, BACK_DOOR, right, BEHIND_DOOR)
+        # Native click regions of the doors drawn in the room: left, ahead, right.
+        self.regions = (left, BACK_DOOR, right)
 
     def _photo(self, key, build):
         if key not in self._photos:
@@ -39,8 +40,8 @@ class PixelView:
     def _copy(self, photo, x=0, y=0):
         self.frame.tk.call(self.frame, "copy", photo, "-to", x, y)
 
-    def draw(self, scene, fade=0, lights="on"):
-        """Compose the scene, darken it by `fade` (0..4) and show it zoomed."""
+    def compose(self, scene, fade=0, lights="on"):
+        """Draw the room into the frame and darken it by `fade` (0..4); the HUD goes on top."""
         self._copy(self._background(scene, lights))
         for door in scene.doors:
             if door.portal == 1:
@@ -57,6 +58,18 @@ class PixelView:
             self._copy(photo, x + (GUARDIAN_ASIDE if scene.guardian == "cleared" else 0), y)
         if fade:
             self._copy(self._photo(("veil", fade), lambda: fade_veil(fade).png()))
+
+    def overlay(self, photo, x, y):
+        self._copy(photo, x, y)
+
+    def fill(self, ink, x0, y0, x1, y1):
+        """Paint a palette colour over a native rectangle, edges included."""
+        x0, y0, x1, y1 = max(0, x0), max(0, y0), min(W - 1, x1), min(H - 1, y1)
+        if x1 >= x0 and y1 >= y0:
+            self.frame.put(hex_color(ink), to=(x0, y0, x1 + 1, y1 + 1))
+
+    def present(self):
+        """Show the frame at the largest integer zoom that fits, centred on black."""
         cw, ch = max(1, self.canvas.winfo_width()), max(1, self.canvas.winfo_height())
         scale = max(1, min(cw // W, ch // H))
         if self.display is None or scale != self.scale:
@@ -72,12 +85,3 @@ class PixelView:
 
     def to_canvas(self, x, y):
         return self.origin[0] + x * self.scale, self.origin[1] + y * self.scale
-
-    def region_at(self, x, y):
-        """The portal whose clickable region holds this canvas point, or None."""
-        native = self.to_native(x, y)
-        if native:
-            for portal, (x0, y0, x1, y1) in enumerate(self.regions):
-                if x0 <= native[0] <= x1 and y0 <= native[1] <= y1:
-                    return portal
-        return None
