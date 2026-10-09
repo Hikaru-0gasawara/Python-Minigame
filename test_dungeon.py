@@ -3,14 +3,26 @@
 import unittest
 from collections import deque
 
-from dungeon import CAMPAIGN, EXIT_HITS, LIVES, MODES, Expedition, format_seed, generate_dungeon, parse_seed
+from dungeon import (BUFFS, CAMPAIGN, DEBUFFS, EXIT_HITS, HARD, LIVES, MODES, PLACED, Expedition,
+                     format_seed, generate_dungeon, parse_seed)
 from dungeon_map import CARDINAL_DIRECTIONS, distances
 
 
+def make_combat(game):
+    """Turn every ordinary Room into a Combat room, isolating Turn and Guardian rules."""
+    for room in game.dungeon.rooms.values():
+        if room.kind not in ("entrance", "exit"):
+            room.kind, room.effect = "combat", None
+    return game
+
+
 class DungeonTests(unittest.TestCase):
-    def make_game(self, difficulty=1, players=1):
+    def make_game(self, difficulty=1, players=1, only_guardians=True):
         self.now = 100.0
-        return Expedition(difficulty, players, 42, lambda: self.now)
+        game = Expedition(difficulty, players, 42, lambda: self.now)
+        if only_guardians:
+            make_combat(game)
+        return game
 
     def solve(self, game):
         return game.submit(game.question["answer"])
@@ -78,7 +90,7 @@ class DungeonTests(unittest.TestCase):
                     self.assertEqual(len(distances(without_exit)), len(g.dungeon.rooms) - 1)
 
     def test_dungeon_depends_only_on_seed_and_difficulty(self):
-        played = self.make_game()
+        played = self.make_game(only_guardians=False)
         self.walk(played, [played.exits()[0].key])
         fresh = generate_dungeon(42, 1)
         self.assertEqual(played.dungeon.connections, fresh.connections)
@@ -230,6 +242,108 @@ class DungeonTests(unittest.TestCase):
         visit()
         self.assertEqual(g.active.visited, set(g.dungeon.rooms) - {g.dungeon.exit_key})
         self.assertEqual(g.status, "playing")
+
+    def plant(self, game, kind, effect=None):
+        """Make the Room behind a branching Entrance door a given kind; return that door."""
+        door = self.branching_door(game)
+        room = game.exits()[door]
+        room.kind, room.effect = kind, effect
+        return door
+
+    def test_room_kinds_and_effects_come_from_the_seed(self):
+        kinds, dead_ends = set(), set()
+        for seed in range(150):
+            dungeon = generate_dungeon(seed, HARD)
+            self.assertEqual(dungeon.rooms, generate_dungeon(seed, HARD).rooms)
+            for key, room in dungeon.rooms.items():
+                kinds.add(room.kind)
+                if len(dungeon.connections[key]) == 1 and key != dungeon.exit_key:
+                    dead_ends.add(room.kind)
+                expected = (BUFFS if room.kind in ("treasure", "elite") else
+                            DEBUFFS if room.kind in ("mimic", "trap") else
+                            ("heal",) if room.kind == "sanctuary" else (None,))
+                self.assertIn(room.effect, expected)
+        self.assertEqual(kinds, set(PLACED) | {"entrance", "exit"})
+        self.assertGreater(len(dead_ends), 4)  # A Dead End may hold any kind.
+
+    def test_elite_asks_a_hard_question_and_grants_its_buff(self):
+        g = self.make_game(players=2)
+        door = self.plant(g, "elite", "insight")
+        g.enter(door)
+        self.assertEqual(g.question_tier, "hard")
+        self.assertIn(g.question, g.bank.tiers["hard"])
+        result = self.solve(g)
+        self.assertIn("Prêmio", result["message"])
+        self.assertEqual((g.event["player"], g.event["effect"]), (1, "insight"))
+
+    def test_treasure_mimic_and_trap_fire_only_on_each_players_first_visit(self):
+        for kind in ("treasure", "mimic", "trap"):
+            with self.subTest(kind=kind):
+                g = self.make_game()
+                effect = "insight" if kind == "treasure" else "life"
+                door = self.plant(g, kind, effect)
+                room = g.exits()[door]
+                self.assertEqual(g.appearance(room), "unknown" if kind == "trap" else "treasure")
+                g.enter(door)
+                self.assertIsNone(g.question)
+                self.assertEqual(g.event["effect"], effect)
+                self.assertEqual(g.appearance(room), kind)
+                self.assertTrue(g.has_cleared(room))
+                lives = g.active.lives
+                g.retreat()
+                g.enter(door)
+                self.assertIsNone(g.event)
+                self.assertEqual(g.active.lives, lives)
+
+    def test_a_debuff_on_entry_retreats_skips_or_costs_a_life(self):
+        g = self.make_game(players=2)
+        door = self.plant(g, "trap", "retreat")
+        g.enter(door)
+        self.assertEqual((g.players[0].position, g.player), ((0, 0), 1))
+        door = self.plant(g, "trap", "skip")  # Same Room, unvisited by Player 2.
+        g.enter(door)
+        self.assertTrue(g.players[1].skip_next)
+        self.assertEqual(g.player, 0)
+
+    def test_sanctuary_restores_one_life_on_every_visit_up_to_the_maximum(self):
+        g = self.make_game()
+        door = self.plant(g, "sanctuary", "heal")
+        g.active.lives = 1
+        g.enter(door)
+        self.assertEqual(g.active.lives, 2)
+        g.retreat()
+        g.enter(door)
+        g.retreat()
+        g.enter(door)
+        self.assertEqual(g.active.lives, LIVES)
+
+    def test_empty_room_does_nothing_and_ends_the_turn(self):
+        g = self.make_game(players=2)
+        door = self.plant(g, "empty")
+        g.enter(door)
+        self.assertEqual((g.event, g.question, g.player, g.players[0].lives), (None, None, 1, LIVES))
+
+    def test_haste_grants_exactly_one_extra_move(self):
+        g = self.make_game(players=2)
+        door = self.plant(g, "treasure", "haste")
+        g.enter(door)
+        self.assertEqual(g.player, 0)
+        self.assertTrue(g.enter(self.door_to(g, (0, 0))))
+        self.assertEqual(g.player, 1)
+        self.assertEqual(g.players[0].extra_moves, 0)
+
+    def test_insight_reveals_two_passages_for_that_player_only(self):
+        g = self.make_game(players=2)
+        door = self.plant(g, "treasure", "insight")
+        room = g.exits()[door].key
+        g.enter(door)
+        ring = {room}
+        within = set()
+        for _ in range(2):
+            ring = {n for key in ring for n in g.dungeon.connections[key]}
+            within |= ring
+        self.assertLessEqual(within, g.players[0].revealed)
+        self.assertFalse(within <= g.players[1].revealed)
 
     def test_tier_frequencies_follow_each_difficulty(self):
         for difficulty, (_name, _rooms, seconds, weights) in MODES.items():

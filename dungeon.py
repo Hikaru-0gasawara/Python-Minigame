@@ -21,14 +21,28 @@ EXIT_HITS = 3
 LIVES = 3
 # A missed easy Question hurts most: the penalty shrinks as the Tier rises.
 PENALTIES = {"easy": "life", "medium": "skip", "hard": "retreat"}
-PENALTY_TEXT = {"life": "−1 vida", "entrance": "sem vidas, de volta à entrada",
-                "skip": "perde a próxima vez", "retreat": "recua uma sala"}
-# Room kind: on-screen name, hint, colour.
+BUFFS = ("haste", "insight")
+DEBUFFS = ("retreat", "skip", "life")
+EFFECT_TEXT = {"life": "−1 vida", "entrance": "sem vidas, de volta à entrada",
+               "skip": "perde a próxima vez", "retreat": "recua uma sala",
+               "heal": "+1 vida", "haste": "pressa: mais um movimento",
+               "insight": "visão: salas a até 2 passos reveladas"}
+GUARDED = {"combat", "elite", "exit"}
+# Room kind: on-screen name, hint, colour, generation weight.
 ROOMS = {
-    "combat": ("Guardião", "Responda para passar", "#24e5dd"),
-    "exit": ("Núcleo", f"{EXIT_HITS} acertos para escapar", "#f57888"),
-    "entrance": ("Entrada", "Ponto de partida", "#66cde5"),
+    "combat": ("Guardião", "Responda para passar", "#24e5dd", 45),
+    "elite": ("Elite", "Pergunta difícil · prêmio", "#ff9a5c", 10),
+    "treasure": ("Tesouro", "Um baú espera", "#f3c66b", 12),
+    "mimic": ("Mímico", "O baú mordeu!", "#d9825b", 5),
+    "trap": ("Armadilha", "Já disparada", "#c4a0ff", 10),
+    "sanctuary": ("Santuário", "+1 vida a cada visita", "#86e4b4", 6),
+    "empty": ("Sala vazia", "Nada aqui", "#8ea2ad", 12),
+    "exit": ("Núcleo", f"{EXIT_HITS} acertos para escapar", "#f57888", 0),
+    "entrance": ("Entrada", "Ponto de partida", "#66cde5", 0),
+    # What an unvisited Room looks like: only its silhouette.
+    "unknown": ("Desconhecida", "O que há além?", "#5f7380", 0),
 }
+PLACED = [kind for kind, (*_, weight) in ROOMS.items() if weight]
 
 
 @dataclass
@@ -37,6 +51,7 @@ class Room:
     y: int
     kind: str
     depth: int
+    effect: str = None
 
     @property
     def key(self):
@@ -66,6 +81,7 @@ class Player:
     exit_hits: int = 0
     lives: int = LIVES
     skip_next: bool = False
+    extra_moves: int = 0
 
 
 def random_seed():
@@ -91,8 +107,14 @@ def generate_dungeon(seed, difficulty):
     connections, depths, exit_key = generate_layout(rng, MODES[difficulty][1])
     rooms = {}
     for x, y in connections:
-        kind = "entrance" if (x, y) == (0, 0) else "exit" if (x, y) == exit_key else "combat"
-        rooms[x, y] = Room(x, y, kind, depths[x, y])
+        if (x, y) in ((0, 0), exit_key):
+            kind = "entrance" if (x, y) == (0, 0) else "exit"
+        else:
+            kind = rng.choices(PLACED, [ROOMS[k][3] for k in PLACED])[0]
+        effect = (rng.choice(BUFFS) if kind in ("treasure", "elite") else
+                  rng.choice(DEBUFFS) if kind in ("mimic", "trap") else
+                  "heal" if kind == "sanctuary" else None)
+        rooms[x, y] = Room(x, y, kind, depths[x, y], effect)
     return Dungeon(seed, connections, rooms, exit_key)
 
 
@@ -127,6 +149,7 @@ class Expedition:
         self.question_duration = 0
         self.status = "playing"
         self.winner = None
+        self.event = None  # The last Buff or Debuff, for the screen to announce.
 
     @property
     def active(self):
@@ -143,6 +166,12 @@ class Expedition:
     def has_cleared(self, room, player=None):
         return room.key in (player or self.active).cleared
 
+    def appearance(self, room, player=None):
+        """The kind a player believes a Room is: Mimics pass for Treasure until entered."""
+        if room.key in (player or self.active).visited:
+            return room.kind
+        return "treasure" if room.kind in ("treasure", "mimic") else "unknown"
+
     def exits(self, room=None):
         """Existing doors in compass order, including already visited rooms."""
         x, y = (room or self.current).key
@@ -157,6 +186,9 @@ class Expedition:
 
     def _end_turn(self):
         self.question = None
+        if self.active.extra_moves:
+            self.active.extra_moves -= 1
+            return
         self.player = (self.player + 1) % len(self.players)
         while self.active.skip_next:
             self.active.skip_next = False
@@ -168,29 +200,50 @@ class Expedition:
             key, player.came_from = player.came_from, player.position
             self._arrive(player, key)
 
-    def _penalise(self, player, tier):
-        penalty = PENALTIES[tier]
-        if penalty == "life":
+    def _apply(self, player, effect):
+        """Apply a Buff or Debuff and return what actually happened."""
+        if effect == "life":
             player.lives -= 1
             if player.lives <= 0:
                 # Map and Cleared Rooms survive, so the way back is quick.
-                penalty, player.lives, player.came_from = "entrance", LIVES, None
+                effect, player.lives, player.came_from = "entrance", LIVES, None
                 self._arrive(player, self.dungeon.entrance_key)
-        elif penalty == "skip":
+        elif effect == "skip":
             player.skip_next = True
-        else:
+        elif effect == "retreat":
             self._send_back(player)
-        return penalty
+        elif effect == "heal":
+            player.lives = min(LIVES, player.lives + 1)
+        elif effect == "haste":
+            player.extra_moves += 1
+        elif effect == "insight":
+            ring = {player.position}
+            for _ in range(2):
+                ring = {n for key in ring for n in self.dungeon.connections[key]}
+                player.revealed |= ring
+        return effect
+
+    def _effect(self, player, effect):
+        effect = self._apply(player, effect)
+        self.event = {"player": self.players.index(player) + 1, "effect": effect,
+                      "text": EFFECT_TEXT[effect]}
 
     def _move(self, key):
         """Arrive in a Room; a Guardian not yet Cleared keeps the Turn going."""
         player = self.active
         player.came_from = player.position
+        first = key not in player.visited
         self._arrive(player, key)
-        if self.has_cleared(self.current):
-            self._end_turn()
-        else:
+        room = self.current
+        self.event = None
+        if room.kind in GUARDED and not self.has_cleared(room):
             self.ask()
+            return
+        player.cleared.add(key)
+        # Chests and traps fire once per player; a Sanctuary heals on every visit.
+        if room.kind not in GUARDED and room.effect and (first or room.kind == "sanctuary"):
+            self._effect(player, room.effect)
+        self._end_turn()
 
     def enter(self, door):
         if self.status != "playing" or self.question is not None or not self.has_cleared(self.current):
@@ -212,7 +265,9 @@ class Expedition:
     def ask(self):
         if self.status != "playing" or self.question is not None or self.has_cleared(self.current):
             return
-        self.question_tier = self.rng.choices(TIERS, self.tier_weights)[0]
+        self.event = None
+        self.question_tier = ("hard" if self.current.kind == "elite"
+                              else self.rng.choices(TIERS, self.tier_weights)[0])
         self.question = self.bank.draw(self.question_tier, self.rng)
         self.question_duration = self.question_time
         self.question_deadline = self.clock() + self.question_time
@@ -230,9 +285,9 @@ class Expedition:
         correct = not expired and is_correct(question, answer)
         penalty = None
         if not correct:
-            penalty = self._penalise(player, self.question_tier)
+            penalty = self._apply(player, PENALTIES[self.question_tier])
             reason = "Tempo da pergunta esgotado" if expired else "Resposta incorreta"
-            message = f"{reason}. Resposta: {question['answer']} · {PENALTY_TEXT[penalty]}"
+            message = f"{reason}. Resposta: {question['answer']} · {EFFECT_TEXT[penalty]}"
         elif room.kind == "exit":
             player.exit_hits += 1
             message = f"Núcleo {player.exit_hits}/{EXIT_HITS}"
@@ -243,6 +298,9 @@ class Expedition:
         else:
             player.cleared.add(room.key)
             message = "Guardião vencido. Passagem liberada."
+            if room.kind == "elite":
+                self._effect(player, room.effect)
+                message += f" Prêmio: {self.event['text']}."
         result = {"correct": correct, "expired": expired, "message": message,
                   "answer": question["answer"], "player": self.player + 1,
                   "tier": self.question_tier, "penalty": penalty}

@@ -4,6 +4,7 @@ import unittest
 from types import SimpleNamespace
 
 from dungeon import EXIT_HITS, Expedition
+from test_dungeon import make_combat
 from dungeon_ui import DungeonApp, ExpeditionScreen, PORTALS, PLAYER_COLORS
 
 
@@ -26,7 +27,7 @@ class DungeonUITests(unittest.TestCase):
         self.app.mainloop()
 
     def start_seeded(self, players=1):
-        self.app.swap(ExpeditionScreen(self.app, Expedition(players=players, seed=42)))
+        self.app.swap(ExpeditionScreen(self.app, make_combat(Expedition(players=players, seed=42))))
         self.app.update()
         return self.app.screen
 
@@ -258,6 +259,23 @@ class DungeonUITests(unittest.TestCase):
             self.assertEqual(g.player, (player+1) % 4)
             screen.refresh()
         self.assertEqual(screen.game.player, 0)
+
+    def test_unvisited_rooms_are_silhouettes_and_chests_hide_mimics(self):
+        screen = self.start_seeded()
+        g = screen.game
+        doors = g.exits()
+        doors[0].kind, doors[0].effect = "mimic", "life"
+        doors[1].kind = "trap"
+        screen.refresh()
+        kinds = {screen.map.gettags(item)[-1] for item in screen.map.find_withtag("room")}
+        self.assertEqual(kinds - {"kind:entrance"}, {"kind:treasure", "kind:unknown"})
+        labels = [b.cget("text") for b in screen.door_buttons]
+        self.assertTrue(any("Tesouro" in text for text in labels))
+        self.assertTrue(any("Desconhecida" in text for text in labels))
+        self.assertFalse(any("Mímico" in text or "Armadilha" in text for text in labels))
+        screen.enter(0)
+        self.assertIn("J1 · −1 vida", screen.feedback.cget("text"))
+        self.assertIn("MÍMICO", screen.room_title.cget("text"))
 
     def test_tier_lives_and_penalties_are_shown(self):
         screen = self.start_seeded(players=2)

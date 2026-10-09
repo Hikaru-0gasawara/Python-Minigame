@@ -5,7 +5,7 @@ import random
 import time
 import tkinter as tk
 
-from dungeon import EXIT_HITS, LIVES, PENALTIES, PENALTY_TEXT, Expedition, ROOMS, format_seed
+from dungeon import EFFECT_TEXT, EXIT_HITS, LIVES, PENALTIES, Expedition, ROOMS, format_seed
 from menu_ui import Setup
 from room_scene import RoomScene, DOOR_BOUNDS
 from motion import CanvasVeil, smooth, blend
@@ -25,7 +25,8 @@ PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
            ("L", "LESTE", (1, 0)), ("S", "SUL", (0, 1)))
 COMPASS = (("N", "NORTE", (0, -1)), ("L", "LESTE", (1, 0)),
            ("S", "SUL", (0, 1)), ("O", "OESTE", (-1, 0)))
-SYMBOLS = {"entrance": "E", "combat": "?", "exit": "X"}
+SYMBOLS = {"entrance": "E", "combat": "G", "elite": "!", "treasure": "$", "mimic": "M",
+           "trap": "^", "sanctuary": "+", "empty": "·", "exit": "X", "unknown": ""}
 TIER_NAMES = {"easy": "FÁCIL", "medium": "MÉDIA", "hard": "DIFÍCIL"}
 
 
@@ -166,7 +167,7 @@ class ExpeditionScreen(tk.Frame):
         self.map.pack(fill="x")
         self.map.bind("<Button-1>", self.map_click)
         self.map_positions = {}
-        label(side, "Cheia: liberada · X: núcleo · ●: rivais\nAlt + setas: mover · Alt + Q/E: olhar",
+        label(side, "$ baú · ! elite · ^ armadilha · + santuário · ● rivais\nAlt + setas: mover · Alt + Q/E: olhar",
               9, MUTED, justify="left").pack(anchor="w", pady=6)
         self.roster = tk.Frame(side, bg=PANEL)
         self.roster.pack(fill="x", pady=(4, 6))
@@ -249,9 +250,20 @@ class ExpeditionScreen(tk.Frame):
         if moved:
             self.arrival_at = time.monotonic() if self.app.effects.get() else None
             self.resume_at = 0
-            self.feedback.configure(text=ROOMS[self.game.current.kind][1] if self.game.question
-                                    else "Sala já liberada. A vez passa adiante.", fg=MUTED)
+            self.announce()
             self.refresh()
+
+    def announce(self):
+        """Say what the last move did: a Buff, a Debuff, a Guardian or nothing."""
+        g, event = self.game, self.game.event
+        if event:
+            good = event["effect"] in ("haste", "insight", "heal")
+            color = PLAYER_COLORS[event["player"]-1] if good else RED
+            self.feedback.configure(text=f"J{event['player']} · {event['text'].capitalize()}", fg=color)
+            self.popups.append([event["text"].upper(), .5, .42, 1.6, color])
+        else:
+            self.feedback.configure(text=ROOMS[g.current.kind][1] if g.question
+                                    else "Caminho livre. A vez passa adiante.", fg=MUTED)
 
     def relative_portals(self, facing=None):
         direction = self.facing if facing is None else facing
@@ -334,7 +346,7 @@ class ExpeditionScreen(tk.Frame):
         self.feedback.configure(text=(f"J{author} · " if author else "") + result["message"],
                                 fg=PLAYER_COLORS[author-1] if good and author else RED)
         self.resume_at = time.monotonic() + (1.3 if good else 3.0)
-        caption = f"J{author}  ✓" if good else PENALTY_TEXT[result["penalty"]].upper()
+        caption = f"J{author}  ✓" if good else EFFECT_TEXT[result["penalty"]].upper()
         self.popups.append([caption,
                             .5, .42, 1.6, PLAYER_COLORS[author-1] if good and author else RED])
         if good and self.app.effects.get():
@@ -358,9 +370,10 @@ class ExpeditionScreen(tk.Frame):
         for i, btn in enumerate(self.door_buttons):
             direction = self.relative_portals()[i][1]
             room = exits[targets[i]] if targets[i] is not None else None
-            hint = "Liberada" if room and g.has_cleared(room) else ROOMS[room.kind][1] if room else "Sem passagem"
-            btn.configure(text=f"{direction}\n{ROOMS[room.kind][0] if room else 'PAREDE'}\n{hint}",
-                          fg=ROOMS[room.kind][2] if room else MUTED,
+            kind = g.appearance(room) if room else None
+            hint = "Liberada" if room and g.has_cleared(room) else ROOMS[kind][1] if room else "Sem passagem"
+            btn.configure(text=f"{direction}\n{ROOMS[kind][0] if room else 'PAREDE'}\n{hint}",
+                          fg=ROOMS[kind][2] if room else MUTED,
                           state="normal" if ready and room else "disabled")
         self.back_btn.configure(state="normal" if playing and g.active.came_from and not self.transition else "disabled")
         for btn in self.look_buttons:
@@ -457,17 +470,18 @@ class ExpeditionScreen(tk.Frame):
         color_here = PLAYER_COLORS[g.player]
         for key in me.revealed:
             x, y = positions[key]
-            room = g.dungeon.rooms[key]
+            kind = g.appearance(g.dungeon.rooms[key])
             current = key == g.current.key
             cleared = key in me.cleared
-            color = color_here if current else ROOMS[room.kind][2]
+            color = color_here if current else ROOMS[kind][2]
             if current:
                 c.create_rectangle(x-radius-3, y-radius-3, x+radius+3, y+radius+3, outline=color_here, width=1)
             c.create_rectangle(x-radius, y-radius, x+radius, y+radius,
                                fill=color if cleared or current else BG, outline=color,
-                               width=1, tags=("room", f"room:{key[0]}:{key[1]}"))
+                               dash=(2, 2) if kind == "unknown" else None,
+                               width=1, tags=("room", f"room:{key[0]}:{key[1]}", f"kind:{kind}"))
             if radius >= 5:
-                c.create_text(x, y, text=("↑", "→", "↓", "←")[self.facing] if current else SYMBOLS[room.kind],
+                c.create_text(x, y, text=("↑", "→", "↓", "←")[self.facing] if current else SYMBOLS[kind],
                               fill=BG if cleared or current else color, font=(FONT, 8, "bold"))
         for i, key in rivals:
             x, y = positions[key]
@@ -540,9 +554,10 @@ class ExpeditionScreen(tk.Frame):
         portals = []
         for i, index in enumerate(targets):
             room = exits[index] if index is not None else None
+            kind = None if room is None else g.appearance(room)
             portals.append(None if room is None else {
-                "label": ROOMS[room.kind][0], "compass": compass[i][0],
-                "color": ROOMS[room.kind][2], "cleared": g.has_cleared(room)})
+                "label": ROOMS[kind][0], "compass": compass[i][0],
+                "color": ROOMS[kind][2], "cleared": g.has_cleared(room)})
         here = g.has_cleared(g.current)
         self.renderer.draw(room_key=g.current.key, kind=g.current.kind, portals=portals,
                            facing=COMPASS[facing][1], locked=not here,
@@ -592,7 +607,7 @@ class ExpeditionScreen(tk.Frame):
                              else g.name.upper())
         self.update_players(now)
         qleft = g.question_remaining if g.question else 0
-        miss = PENALTY_TEXT[PENALTIES[g.question_tier]].upper() if g.question else ""
+        miss = EFFECT_TEXT[PENALTIES[g.question_tier]].upper() if g.question else ""
         meta = (f"JOGADOR {g.player+1}  /  {TIER_NAMES.get(g.question_tier)} · ERRO: {miss}  /  "
                 f"{math.ceil(qleft)}s" if g.question else
                 f"JOGADOR {g.player+1} · ESCOLHA SUA ROTA" if g.has_cleared(g.current) else
