@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import tempfile
 import time
 import unittest
 from types import SimpleNamespace
@@ -10,11 +11,13 @@ from audio import Audio
 import font
 import hud
 from dungeon import EXIT_HITS, Expedition
+from menu_ui import Setup
+from records import Records
 from scene import sector_of
 from test_dungeon import make_combat
 from dungeon_ui import (ALT_MASK, ARRIVE, OPEN, REACT, STEP, STEP_ASIDE, TURN_FADE, WALK, DungeonApp,
-                        ExpeditionScreen, PORTALS, PLAYER_COLORS, ResultsScreen)
-from room_art import DOOR_STEPS, GUARDIAN_ASIDE
+                        ExpeditionScreen, PORTALS, ResultsScreen)
+from room_art import DOOR_STEPS, GUARDIAN_ASIDE, H, W
 
 
 class DungeonUITests(unittest.TestCase):
@@ -23,6 +26,9 @@ class DungeonUITests(unittest.TestCase):
         self.app.effects.set(False)
         self.sounds = []          # the names played; None is a stop
         self.app.audio = Audio(lambda path: self.sounds.append(path and Path(path).stem))
+        folder = tempfile.TemporaryDirectory()      # never the player's own Records
+        self.addCleanup(folder.cleanup)
+        self.app.records = Records(Path(folder.name) / "records.json")
         # Keep the test window off the user's visible desktop.
         self.app.geometry("1000x760+20000+20000")
         self.errors = []
@@ -704,31 +710,61 @@ class DungeonUITests(unittest.TestCase):
         self.assertNotIn(pending, self.app.tk.call("after", "info"))
         return screen.game, self.app.screen
 
-    def test_results_name_the_winner_and_show_the_seed(self):
-        game, results = self.finish_and_show_results()
+    def test_results_name_the_winner_in_their_colour_with_difficulty_seed_and_players(self):
+        game, results = self.finish_and_show_results(players=4)
         self.assertIsInstance(results, ResultsScreen)
-        self.assertEqual(results.winner_label.cget("text"), "JOGADOR 1 ESCAPOU")
-        self.assertEqual(results.winner_label.cget("fg"), PLAYER_COLORS[0])
-        self.assertIn("SEED 0000-002A", results.seed_label.cget("text"))  # Seed 42.
+        panel = results.panel
+        self.assertEqual(panel.texts[1], "JOGADOR 1 ESCAPOU")
+        self.assertIn(f"{game.name.upper()} · SEED 0000-002A", panel.texts[2])  # Seed 42.
+        winner_row = {panel.pix.get(x, y) for x in range(panel.pix.w) for y in range(2 + font.LINE, 2 + 2 * font.LINE)}
+        self.assertIn(hud.PLAYER_INK[0], winner_row)
+        self.assertEqual(sum(text.startswith(f"J{i + 1} ") for text in panel.texts for i in range(4)), 4)
+        self.assertTrue(0 <= panel.x and panel.x + panel.pix.w <= W and 0 <= panel.y and panel.y + panel.pix.h <= H)
+
+    def test_a_winning_time_becomes_a_record_with_its_rank(self):
+        game, results = self.finish_and_show_results()
+        self.assertIn("★ NOVO RECORDE · #1", results.panel.texts)
+        best = self.app.records.top(game.difficulty)[0]
+        self.assertEqual((best["seed"], best["players"]), (42, 2))
+        self.assertAlmostEqual(best["seconds"], game.elapsed)
+
+    def test_a_slower_time_announces_no_record(self):
+        for _ in range(5):
+            self.app.records.submit(Expedition().difficulty, 0, 1, 1)
+        game, results = self.finish_and_show_results()
+        self.assertIsNone(results.rank)
+        self.assertFalse(any("RECORDE" in text for text in results.panel.texts))
 
     def test_rematch_on_the_same_seed_rebuilds_the_same_dungeon(self):
         game, results = self.finish_and_show_results(players=3)
-        results.same_btn.invoke()
+        results.on_key(SimpleNamespace(keysym="Return"))      # the rematch is picked first
         self.app.update()
         rematch = self.app.screen.game
         self.assertEqual((rematch.seed, rematch.difficulty, len(rematch.players)), (42, game.difficulty, 3))
         self.assertEqual(rematch.dungeon.connections, game.dungeon.connections)
         self.assertEqual(rematch.status, "playing")
 
-    def test_new_seed_and_menu_leave_no_old_callbacks(self):
+    def test_new_seed_by_click_leaves_no_old_callbacks(self):
         game, results = self.finish_and_show_results()
-        results.new_btn.invoke()
+        x, y = results.region_centre(1)
+        results.motion(SimpleNamespace(x=x, y=y))
+        self.assertEqual(results.selected, 1)
+        results.click(SimpleNamespace(x=x, y=y))
         self.app.update()
         self.assertNotEqual(self.app.screen.game.seed, game.seed)
         pending = self.app.screen.job
         self.app.show_setup()
         self.app.update()
         self.assertNotIn(pending, self.app.tk.call("after", "info"))
+
+    def test_the_menu_is_reached_by_keyboard(self):
+        game, results = self.finish_and_show_results()
+        for keysym, selected in (("Right", 1), ("Tab", 2), ("Right", 0), ("Left", 2)):
+            results.on_key(SimpleNamespace(keysym=keysym))
+            self.assertEqual(results.selected, selected)
+        results.on_key(SimpleNamespace(keysym="Return"))
+        self.app.update()
+        self.assertIsInstance(self.app.screen, Setup)
 
 
 if __name__ == "__main__":

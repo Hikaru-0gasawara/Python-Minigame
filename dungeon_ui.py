@@ -11,23 +11,15 @@ from audio import Audio
 import font
 import hud
 from dialogue import Dialogue
-from dungeon import EFFECT_TEXT, EXIT_HITS, Expedition, ROOMS, format_seed
-from hud import hearts
+from dungeon import EFFECT_TEXT, Expedition, ROOMS, format_seed
 from menu_ui import Setup
 from motion import smooth
-from palette import hex_color
 from pixel_view import PixelView
+from records import Records
 from room_art import DOOR_STEPS, GUARDIAN_ASIDE, H, W
 from scene import portal_targets, relative_portals, scene_for, sector_of
 
 BG = "#080e12"
-PANEL = "#111e25"
-TEXT = "#edf1f8"
-MUTED = "#94a4bd"
-GOLD = "#f3c66b"
-TEAL = "#24e5dd"
-FONT = "Segoe UI"
-PLAYER_COLORS = tuple(hex_color(ink) for ink in hud.PLAYER_INK)
 # Alt is a different modifier bit on Windows; NumLock owns 0x8 there.
 ALT_MASK = 0x20000 if sys.platform == "win32" else 0x8
 
@@ -44,19 +36,6 @@ REACT, GLITCH, STEP_ASIDE = .9, .5, .4   # after an answer: how long the Guardia
 ARRIVAL_LIGHTS = ((.25, "off"), (.32, "on"), (.40, "off"), (.50, "dimmed"), (math.inf, "on"))
 
 
-def label(parent, text="", size=11, color=TEXT, **kwargs):
-    return tk.Label(parent, text=text, bg=parent.cget("bg"), fg=color,
-                    font=(FONT, size), **kwargs)
-
-
-def button(parent, text, command, primary=False):
-    return tk.Button(parent, text=text, command=command, font=(FONT, 11, "bold"),
-                     bg=GOLD if primary else "#24334b", fg=BG if primary else TEXT,
-                     activebackground=TEAL, activeforeground=BG,
-                     disabledforeground="#65748a", relief="flat", bd=0,
-                     padx=14, pady=9, cursor="hand2", takefocus=True)
-
-
 class DungeonApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -67,6 +46,7 @@ class DungeonApp(tk.Tk):
         self.screen = None
         self.effects = tk.BooleanVar(value=True)
         self.audio = Audio()
+        self.records = Records()
         self.show_setup()
 
     def swap(self, screen):
@@ -82,40 +62,78 @@ class DungeonApp(tk.Tk):
         self.swap(ExpeditionScreen(self, Expedition(difficulty, players, seed)))
 
     def show_results(self, game):
-        self.swap(ResultsScreen(self, game))
+        rank = self.records.submit(game.difficulty, game.elapsed, game.seed, len(game.players))
+        self.swap(ResultsScreen(self, game, rank))
 
 
 class ResultsScreen(tk.Frame):
-    """Names the winner, shows the Seed, and offers a rematch on it or a fresh one."""
+    """The winner's room, dimmed behind a pixel panel: who escaped, how fast, a new Record, and what next."""
 
-    def __init__(self, app, game):
-        super().__init__(app, bg=BG)
-        self.game = game
-        box = tk.Frame(self, bg=PANEL, padx=40, pady=30, highlightthickness=1, highlightbackground=GOLD)
-        box.place(relx=.5, rely=.5, anchor="center")
-        winner = game.winner
-        label(box, "MASMORRA CONQUISTADA", 14, GOLD).pack()
-        self.winner_label = label(box, f"JOGADOR {winner+1} ESCAPOU", 30, PLAYER_COLORS[winner])
-        self.winner_label.pack(pady=(6, 4))
-        self.seed_label = label(box, f"{game.name.upper()}  ·  SEED {format_seed(game.seed)}", 12, TEXT)
-        self.seed_label.pack()
-        label(box, "Compartilhe a seed para desafiar alguém na mesma masmorra.", 9, MUTED).pack(pady=(2, 16))
-        for i, player in enumerate(game.players):
-            label(box, f"J{i+1}  {hearts(player)}   ·   {len(player.visited)} {'sala visitada' if len(player.visited) == 1 else 'salas visitadas'}   ·   "
-                       f"núcleo {player.exit_hits}/{EXIT_HITS}",
-                  11, PLAYER_COLORS[i] if i == winner else MUTED).pack(anchor="w")
-        actions = tk.Frame(box, bg=PANEL)
-        actions.pack(fill="x", pady=(20, 0))
+    def __init__(self, app, game, rank=None):
+        super().__init__(app, bg="#000000")
+        self.app, self.game, self.rank = app, game, rank
+        self.selected = 0
         players = len(game.players)
-        self.same_btn = button(actions, "REVANCHE · MESMA SEED",
-                               lambda: app.start(game.difficulty, players, game.seed), True)
-        self.new_btn = button(actions, "NOVA SEED", lambda: app.start(game.difficulty, players))
-        self.menu_btn = button(actions, "MENU", app.show_setup)
-        for btn in (self.same_btn, self.new_btn, self.menu_btn):
-            btn.pack(side="left", padx=4)
-            btn.bind("<Return>", lambda e, b=btn: b.invoke())
-        self.same_btn.focus_set()
+        # In the order of hud.ACTIONS: rematch on the same Seed, a new Seed, the menu.
+        self.actions = (lambda: app.start(game.difficulty, players, game.seed),
+                        lambda: app.start(game.difficulty, players), app.show_setup)
+        self.canvas = tk.Canvas(self, bg="#000000", highlightthickness=0, takefocus=True)
+        self.canvas.pack(fill="both", expand=True)
+        self.renderer = PixelView(self.canvas)
+        room = game.dungeon.rooms[game.players[game.winner].position]
+        facing = next((f for f in range(4) if portal_targets(game, f, room)[1] is None), 0)  # face the core gate
+        self.renderer.compose(scene_for(game, facing, game.winner), "dimmed")
+        self.canvas.bind("<Configure>", lambda e: self.draw())
+        self.canvas.bind("<Motion>", self.motion)
+        self.canvas.bind("<Button-1>", self.click)
+        self.canvas.bind("<Key>", self.on_key)     # canvas bindings die with the screen
+        self.canvas.focus_set()
+        self.draw()
 
+    def draw(self):
+        self.panel = hud.results(self.game, self.rank, self.selected)
+        self._photo = tk.PhotoImage(master=self.canvas, data=self.panel.pix.png())
+        self.renderer.clear_hud()
+        self.renderer.overlay(self._photo, self.panel.x, self.panel.y)
+        self.canvas.delete("all")
+        self.renderer.present(fade=2)
+
+    def action_at(self, event):
+        native = self.renderer.to_native(event.x, event.y)
+        for (_, i), (x0, y0, x1, y1) in self.panel.regions:
+            if native and x0 <= native[0] <= x1 and y0 <= native[1] <= y1:
+                return i
+        return None
+
+    def region_centre(self, i):
+        """Canvas coordinates of an action, for clicks and tests."""
+        x0, y0, x1, y1 = self.panel.regions[i][1]
+        return self.renderer.to_canvas((x0 + x1 + 1) / 2, (y0 + y1 + 1) / 2)
+
+    def motion(self, event):
+        i = self.action_at(event)
+        self.canvas.configure(cursor="" if i is None else "hand2")
+        if i is not None and i != self.selected:
+            self.selected = i
+            self.draw()
+
+    def click(self, event):
+        i = self.action_at(event)
+        if i is not None:
+            self.actions[i]()
+
+    def on_key(self, event):
+        """Arrows and Tab pick an action, Enter or space takes it, Escape goes to the menu."""
+        if event.keysym in ("Return", "KP_Enter", "space"):
+            self.actions[self.selected]()
+        elif event.keysym == "Escape":
+            self.app.show_setup()
+        elif event.keysym in ("Left", "Up", "Right", "Down", "Tab"):
+            self.selected = (self.selected + (-1 if event.keysym in ("Left", "Up") else 1)) % len(self.actions)
+            self.draw()
+        else:
+            return None
+        return "break"
 
 
 class ExpeditionScreen(tk.Frame):

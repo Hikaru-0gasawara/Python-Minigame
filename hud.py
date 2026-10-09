@@ -25,6 +25,7 @@ TAB_CENTRE = 186          # between the Turn badge and the minimap, clear of the
 CARDS_TOP = H - 46
 BOX_WIDTH = 312
 MAX_QUESTION_LINES = 4
+ACTIONS = ("REVANCHE · MESMA SEED", "NOVA SEED", "MENU")
 
 
 @dataclass
@@ -243,6 +244,45 @@ def mute_toggle(muted, y):
     piece = text_panel([("SOM ○" if muted else "SOM ●", MUTED if muted else TEXT)], 0, y)
     x = piece.x = W - piece.pix.w - 2
     piece.regions.append((("mute",), (x, y, x + piece.pix.w - 1, y + piece.pix.h - 1)))
+    return piece
+
+
+def duration(seconds):
+    """A time as M:SS."""
+    seconds = int(seconds)
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def results(game, rank, selected):
+    """The centred results panel: who escaped and how fast, a new Record, each player, then the actions.
+
+    Its regions are (("action", i), rect) for each of ACTIONS; `selected` is highlighted.
+    """
+    winner = game.winner
+    lines = [("MASMORRA CONQUISTADA", GOLD), (f"JOGADOR {winner + 1} ESCAPOU", PLAYER_INK[winner]),
+             (f"{game.name.upper()} · SEED {format_seed(game.seed)} · {duration(game.elapsed)}", TEXT)]
+    if rank:
+        lines.append((f"★ NOVO RECORDE · #{rank}", GOLD))
+    lines += [("Compartilhe a seed para desafiar alguém.", MUTED), ("", TEXT)]
+    for i, player in enumerate(game.players):
+        rooms = len(player.visited)
+        lines.append((f"J{i + 1} {hearts(player)} · {rooms} {'SALA' if rooms == 1 else 'SALAS'} · "
+                      f"NÚCLEO {player.exit_hits}/{EXIT_HITS}", PLAYER_INK[i] if i == winner else MUTED))
+    chips = [text_panel([(label, TEXT if i == selected else MUTED)], 0, 0, border=GOLD if i == selected else EDGE)
+             for i, label in enumerate(ACTIONS)]
+    row = sum(chip.pix.w for chip in chips) + 4 * (len(chips) - 1)
+    width = max(row, *(font.measure(text) for text, _ in lines)) + 12
+    top = len(lines) * font.LINE + 6
+    p = panel(width, top + chips[0].pix.h + 5, GOLD)
+    for i, (text, ink) in enumerate(lines):
+        font.draw(p, (width - font.measure(text)) // 2, 2 + i * font.LINE, text, ink, shadow=0)
+    piece = Piece(p, (W - width) // 2, (H - p.h) // 2, [text for text, _ in lines] + list(ACTIONS))
+    x = (width - row) // 2
+    for i, chip in enumerate(chips):
+        p.blit(chip.pix, x, top)
+        piece.regions.append((("action", i), (piece.x + x, piece.y + top,
+                                              piece.x + x + chip.pix.w - 1, piece.y + top + chip.pix.h - 1)))
+        x += chip.pix.w + 4
     return piece
 
 

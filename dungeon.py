@@ -154,6 +154,7 @@ class Expedition:
         # Questions use their own stream so play never alters the Dungeon.
         self.rng = random.Random(f"questions:{self.seed}")
         self.clock = clock
+        self.started, self.won_at = clock(), None
         self.bank = QuestionBank()
         entrance = self.dungeon.entrance_key
         self.players = [Player(entrance, cleared={entrance}) for _ in range(players)]
@@ -176,6 +177,11 @@ class Expedition:
     @property
     def current(self):
         return self.dungeon.rooms[self.active.position]
+
+    @property
+    def elapsed(self):
+        """Seconds since the Expedition started, frozen at the winner's escape."""
+        return (self.clock() if self.won_at is None else self.won_at) - self.started
 
     @property
     def question_remaining(self):
@@ -355,7 +361,7 @@ class Expedition:
             message = f"Núcleo {player.exit_hits}/{EXIT_HITS}"
             if player.exit_hits >= EXIT_HITS:
                 player.cleared.add(room.key)
-                self.status, self.winner = "won", self.player
+                self.status, self.winner, self.won_at = "won", self.player, self.clock()
                 message = "Escapou da masmorra!"
         else:
             player.cleared.add(room.key)

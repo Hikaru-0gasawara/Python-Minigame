@@ -96,8 +96,10 @@ com as mesmas salas e os mesmos poderes nos mesmos lugares; deixe o campo vazio
 para uma masmorra nova. As perguntas sorteadas podem variar entre duas partidas
 com a mesma seed, e a seed só é garantida na mesma versão do jogo.
 
-Ao fim, a tela de resultado mostra o vencedor e a seed, com **Revanche · mesma
-seed**, **Nova seed** e **Menu**.
+Ao fim, a tela de resultado mostra o vencedor, o tempo e a seed, com **Revanche ·
+mesma seed**, **Nova seed** e **Menu** (setas e Enter também escolhem). Os cinco
+melhores tempos de cada dificuldade ficam salvos como recordes em
+`%APPDATA%\ECOS\records.json`; a tela avisa quando a fuga entra para essa lista.
 
 ## Para desenvolvedores
 

@@ -569,5 +569,20 @@ class DungeonTests(unittest.TestCase):
                 break
         self.assertEqual((g.winner, g.players[1].exit_hits, g.players[0].exit_hits), (1, EXIT_HITS, 0))
 
+    def test_elapsed_time_runs_from_the_start_and_freezes_at_the_escape(self):
+        g = self.make_game()
+        self.now += 42
+        self.assertEqual(g.elapsed, 42)
+        exit_key = g.dungeon.exit_key
+        g.active.position = next(iter(g.dungeon.connections[exit_key]))
+        g.active.cleared.add(g.active.position)
+        g.active.exit_hits = EXIT_HITS - 1
+        g.enter(self.door_to(g, exit_key))
+        self.now += 8
+        self.solve(g)
+        self.assertEqual(g.status, "won")
+        self.now += 100
+        self.assertEqual(g.elapsed, 50)
+
 if __name__ == "__main__":
     unittest.main()
