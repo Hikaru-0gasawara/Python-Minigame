@@ -4,9 +4,9 @@
 
 **Blocked by:** 01, 02, 03, 04, 05, 06, 07.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The README matches the shipped game; no mention of cooperative play, score, combo, global clock or the classic board
-- [ ] The README's run and test commands work as written
-- [ ] DESIGN.md describes the competitive race round and an updated list of proposed rounds
-- [ ] The terms match CONTEXT.md; on-screen names match the UI
+- [x] The README matches the shipped game; no mention of cooperative play, score, combo, global clock or the classic board
+- [x] The README's run and test commands work as written
+- [x] DESIGN.md describes the competitive race round and an updated list of proposed rounds
+- [x] The terms match CONTEXT.md; on-screen names match the UI

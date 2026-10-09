@@ -1,8 +1,12 @@
 # Direção do quiz crawler
 
-Este documento registra a direção desta rodada e um roteiro para evoluir o jogo
-parte por parte. As etapas futuras são propostas; sua presença aqui não significa
-que já foram implementadas.
+Este documento registra a direção do jogo e um roteiro para evoluí-lo parte por
+parte. As etapas futuras são propostas; sua presença aqui não significa que já
+foram implementadas. As rodadas 1 a 3 descrevem o crawler cooperativo, com
+pontuação, combo e relógio compartilhados; a rodada 4 o transformou numa corrida
+competitiva (ver [ADR-0001](docs/adr/0001-competitive-race.md)) e removeu o
+tabuleiro clássico ([ADR-0002](docs/adr/0002-crawler-is-the-whole-game.md)).
+O vocabulário do domínio está em [CONTEXT.md](CONTEXT.md).
 
 ## Leitura das sete imagens
 
@@ -44,11 +48,11 @@ continua sendo um lugar explorável; a pergunta é a ação principal de cada sa
 Verde pode indicar conclusão, âmbar uma oportunidade e vermelho um risco, sempre
 acompanhados de texto ou símbolos para não depender somente de cores.
 
-O ciclo é explorar, escolher uma rota, resolver o desafio, receber feedback e
-decidir o próximo destino. Pontuação, combo, bônus de velocidade, vidas e tempo
-formam a base existente a preservar enquanto a exploração ganha profundidade.
-Retratos ou perfis dos participantes devem servir para identificar o jogador da
-vez e a pontuação individual, sem acrescentar painéis vazios de inventário.
+O ciclo é explorar, escolher uma rota, enfrentar o guardião, receber feedback e
+decidir o próximo destino, numa corrida: cada jogador tem o próprio mapa, as
+próprias vidas e o próprio poder guardado, e o primeiro a escapar vence. Os
+cartões dos participantes identificam o jogador da vez, suas vidas, seu
+progresso no núcleo e seu poder, sem painéis vazios de inventário.
 
 A intensidade vem de respostas rápidas da interface: confirmação de acerto,
 pontuação visível e animações curtas. A pergunta e o campo de resposta precisam
@@ -119,23 +123,54 @@ ações duplicadas ficam bloqueadas durante o deslocamento e o fim da partida
 cancela a transição. Olhar mantém a pergunta e o texto digitado. Movimento reduzido
 torna a navegação imediata.
 
+## Rodada 4: corrida competitiva
+
+O crawler virou o jogo inteiro e deixou de ser cooperativo. De 1 a 4 jogadores
+correm pela mesma masmorra, um movimento por turno, em ordem fixa. Pontuação,
+combo, bônus de velocidade, relógio geral e vidas compartilhadas saíram; cada
+pergunta mantém seu próprio tempo, e estourá-lo conta como erro.
+
+- **Seeds:** cada masmorra nasce de uma seed visível e digitável. A mesma seed e
+  dificuldade geram a mesma planta, os mesmos tipos de sala e os mesmos efeitos;
+  as perguntas usam um sorteio separado para que jogar não altere a masmorra.
+- **Dificuldades:** Aventureiro, Guerreiro, Pesadelo e Campanha definem o tamanho
+  (15 / 22 / 30 / 30 salas), o tempo por pergunta e a proporção de perguntas
+  fáceis, médias e difíceis. A Campanha é grande e quase toda fácil.
+- **Guardiões e penalidades:** todo jogador que entra enfrenta o guardião da sala;
+  o estado de sala liberada é pessoal. Errar uma fácil custa uma vida, uma média
+  custa a próxima vez e uma difícil faz recuar. Sem vidas, o jogador volta à
+  entrada com as vidas restauradas e o mapa preservado.
+- **Salas e poderes:** elite, tesouro, mímico, armadilha, santuário e sala vazia,
+  sorteados pela seed. Pressa e Visão agem na hora; Escudo, Maldição e Troca
+  ficam guardados, um por vez, e os dois últimos atingem um rival.
+- **Mapa por jogador:** cada um vê só o que descobriu; salas não visitadas são
+  silhuetas, exceto baús, que podem esconder mímicos. Os rivais aparecem como
+  pontos.
+- **Resultado:** o núcleo pede 3 acertos, um por turno. A tela final mostra o
+  vencedor e a seed e oferece revanche na mesma seed ou uma seed nova.
+
+Decisões em aberto após esta rodada: recuar com a pergunta na tela custa apenas
+o turno, o que barateia fugir de uma pergunta fácil; o núcleo só aparece no mapa
+depois de visitado; o santuário cura a cada visita; Maldição e Troca não têm alvo
+no modo solo.
+
 ## Próximas rodadas propostas
 
-1. **Ritmo e identidade das salas.** Ajustar distâncias, duração da expedição,
-   densidade de eventos e linguagem das salas após experimentar o novo mapa.
-   Criar variações ambientais que ajudem a reconhecer setores.
-2. **Progressão dentro da partida.** Introduzir escolhas de melhorias com efeitos
-   claros sobre tempo, pontuação ou risco. Definir limites e testar combinações
-   antes de ampliar a quantidade de poderes.
-3. **Qualidade do quiz.** Revisar respostas aceitas, categorias e dificuldade;
-   planejar localização do banco atualmente em inglês. Melhorar a explicação
-   após erros sem quebrar o ritmo.
-4. **Feedback audiovisual e acessibilidade.** Sons opcionais, transições curtas,
-   destaque de sequência e controles de intensidade; revisar foco do teclado,
-   contraste e leitura de estados.
-5. **Continuidade entre partidas.** Histórico de resultados, perfis e desafios
-   reproduzíveis por semente, caso essas funções façam sentido após testar o
-   ciclo principal. Qualquer progressão persistente exige decisão própria.
+1. **Balanceamento por playtests.** Ajustar tamanhos, tempo por pergunta,
+   proporções de nível e pesos de cada tipo de sala; decidir as questões em
+   aberto da rodada 4 depois de jogar partidas reais.
+2. **Ritmo e identidade das salas.** Variações ambientais que ajudem a reconhecer
+   setores e tornem cada tipo de sala legível na própria cena, não só no mapa.
+3. **Qualidade do quiz.** Revisar respostas aceitas, categorias e o nível de cada
+   pergunta; melhorar a explicação após erros sem quebrar o ritmo.
+4. **Traduções.** Textos de tela e banco de perguntas em português, inglês e
+   espanhol; os termos do código já seguem o glossário em inglês.
+5. **Feedback audiovisual e acessibilidade.** Sons opcionais, anúncio de turnos
+   pulados, controles de intensidade; revisar foco do teclado, contraste e
+   leitura de estados.
+6. **Modos especiais e multiplayer.** Movimento por dado, limite de turnos,
+   desafios por seed e, mais adiante, partidas em rede com mapas separados. Cada
+   modo entra em sua própria rodada.
 
 Cada rodada deve terminar com uma versão jogável, verificação das regras que
 mudaram e uma descrição objetiva do que foi concluído e do que ficou para depois.
