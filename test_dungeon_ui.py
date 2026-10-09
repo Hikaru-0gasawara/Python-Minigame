@@ -11,6 +11,7 @@ from dungeon_ui import DungeonApp, Expedition, PORTALS
 class DungeonUITests(unittest.TestCase):
     def setUp(self):
         self.app = DungeonApp()
+        self.app.effects.set(False)
         # Keep the test window off the user's visible desktop.
         self.app.geometry("1000x760+20000+20000")
         self.errors = []
@@ -151,6 +152,66 @@ class DungeonUITests(unittest.TestCase):
         self.assertEqual(screen.game.status, "lost")
         self.assertEqual(str(screen.submit_btn.cget("state")), "disabled")
         self.assertEqual(screen.game.lives, 5)
+
+    def test_looking_rotates_portals_without_moving_or_erasing_answer(self):
+        screen = self.start_seeded()
+        screen.enter(0)
+        screen.answer.insert(0, "my unfinished answer")
+        g = screen.game
+        position, question, deadline = g.current.key, g.question, g.question_deadline
+        for facing in (1, 2, 3, 0):
+            screen.look(1)
+            self.assertEqual(screen.facing, facing)
+            self.assertEqual(g.current.key, position)
+            self.assertIs(g.question, question)
+            self.assertEqual(g.question_deadline, deadline)
+            self.assertEqual(screen.answer.get(), "my unfinished answer")
+            for i, (_, _, (dx, dy)) in enumerate(screen.relative_portals()):
+                target = screen.portal_targets()[i]
+                if target is not None:
+                    self.assertEqual(g.exits()[target].key, (g.current.x+dx, g.current.y+dy))
+
+    def test_door_and_walk_transition_only_enters_once_at_arrival(self):
+        screen = self.start_seeded()
+        self.app.effects.set(True)
+        origin = screen.game.current.key
+        target = screen.game.exits()[0].key
+        screen.enter(0)
+        action = screen.transition
+        self.assertEqual(action["type"], "move")
+        self.assertEqual(screen.game.current.key, origin)
+        self.assertIsNone(screen.game.question)
+        screen.enter(1)
+        screen.look(1)
+        screen.back()
+        self.assertIs(screen.transition, action)
+        for fraction in (.1, .5, .9):
+            screen.draw_scene(action["start"] + action["duration"]*fraction)
+        screen.advance_transition(action["start"] + action["duration"] + .01)
+        self.assertEqual(screen.game.current.key, target)
+        self.assertIsNotNone(screen.game.question)
+        self.assertEqual(screen.game.history, [origin])
+        self.assertIsNone(screen.transition)
+
+    def test_motion_toggle_completes_turn_and_timeout_cancels_movement(self):
+        screen = self.start_seeded()
+        self.app.effects.set(True)
+        screen.look(-1)
+        action = screen.transition
+        screen.draw_scene(action["start"] + .1)
+        screen.draw_scene(action["start"] + .25)
+        self.app.effects.set(False)
+        screen.advance_transition(action["start"])
+        self.assertEqual(screen.facing, 3)
+        self.assertIsNone(screen.transition)
+        self.app.effects.set(True)
+        origin = screen.game.current.key
+        screen.enter(0)
+        screen.game.deadline = screen.game.clock() - 1
+        self.pump()
+        self.assertEqual(screen.game.status, "lost")
+        self.assertEqual(screen.game.current.key, origin)
+        self.assertIsNone(screen.transition)
 
 
 if __name__ == "__main__":

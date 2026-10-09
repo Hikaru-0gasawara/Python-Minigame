@@ -5,7 +5,9 @@ import random
 import time
 import tkinter as tk
 
-from dungeon import Dungeon, MODES, ROOMS
+from dungeon import Dungeon, ROOMS
+from menu_ui import Setup
+from room_scene import RoomScene, DOOR_BOUNDS
 
 BG = "#080e12"
 PANEL = "#111e25"
@@ -19,6 +21,8 @@ FONT = "Segoe UI"
 # The perspective always looks north. South is the passage behind the player.
 PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
            ("L", "LESTE", (1, 0)), ("S", "SUL", (0, 1)))
+COMPASS = (("N", "NORTE", (0, -1)), ("L", "LESTE", (1, 0)),
+           ("S", "SUL", (0, 1)), ("O", "OESTE", (-1, 0)))
 SYMBOLS = {"entrance": "E", "combat": "?", "treasure": "+", "elite": "!",
            "sanctuary": "V", "clock": "T", "boss": "X"}
 
@@ -60,45 +64,6 @@ class DungeonApp(tk.Tk):
         self.swap(Expedition(self, Dungeon(difficulty, players)))
 
 
-class Setup(tk.Frame):
-    def __init__(self, app):
-        super().__init__(app, bg=BG)
-        wrap = tk.Frame(self, bg=BG)
-        wrap.place(relx=.5, rely=.5, anchor="center")
-        label(wrap, "E X P L O R E   /   R E S P O N D A   /   S O B R E V I V A", 11, TEAL).pack()
-        label(wrap, "A MASMORRA\nDOS ECOS", 40, GOLD, justify="center").pack(pady=12)
-        label(wrap, "Uma rede de salas. Cada resposta abre um caminho.", 15).pack()
-        label(wrap, "Explore bifurcações, atalhos e becos em um mapa novo a cada partida.\n"
-                    "Encontre o núcleo e vença seus 3 desafios antes do tempo acabar.\n"
-                    "5 vidas compartilhadas · combos por acertos · bônus de velocidade",
-              11, MUTED, justify="center").pack(pady=18)
-        self.level = tk.IntVar(value=1)
-        options = tk.Frame(wrap, bg=BG)
-        options.pack(fill="x")
-        for i, (name, floors, seconds, question_time) in MODES.items():
-            text = f"{name}\n{seconds}s de expedição · {question_time}s por pergunta"
-            if i == 4:
-                text = f"{name}\n{seconds}s de expedição · perguntas de 30 → 15s"
-            tk.Radiobutton(options, text=text, variable=self.level, value=i,
-                           indicatoron=False, bg=PANEL, fg=TEXT, selectcolor="#31546a",
-                           activebackground="#31546a", activeforeground=TEXT,
-                           font=(FONT, 11), relief="flat", bd=0, padx=18, pady=14,
-                           cursor="hand2").grid(row=(i-1)//2, column=(i-1)%2,
-                                                sticky="ew", padx=4, pady=4)
-        row = tk.Frame(wrap, bg=BG)
-        row.pack(pady=15)
-        label(row, "Jogadores locais (cooperativo):", 11, MUTED).pack(side="left")
-        self.players = tk.IntVar(value=1)
-        tk.Spinbox(row, from_=1, to=4, textvariable=self.players, state="readonly",
-                   width=3, font=(FONT, 12), readonlybackground=PANEL, fg=TEXT,
-                   buttonbackground=PANEL).pack(side="left", padx=10)
-        tk.Checkbutton(wrap, text="Efeitos animados (desative para movimento reduzido)",
-                       variable=app.effects, bg=BG, fg=MUTED, selectcolor=PANEL,
-                       activebackground=BG, activeforeground=TEXT).pack(pady=(0, 12))
-        button(wrap, "ENTRAR NA MASMORRA  →",
-               lambda: app.start(self.level.get(), self.players.get()), True).pack(fill="x")
-        label(wrap, "As perguntas e respostas do banco atual estão em inglês.", 10, MUTED).pack(pady=12)
-
 
 class Expedition(tk.Frame):
     def __init__(self, app, game):
@@ -112,6 +77,9 @@ class Expedition(tk.Frame):
         self.last_frame = time.monotonic()
         self.hover = None
         self.finished = False
+        self.facing = 0
+        self.transition = None
+        self._shown_question = None
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
@@ -125,14 +93,23 @@ class Expedition(tk.Frame):
         main.grid(row=1, column=0, sticky="nsew", padx=(20, 10), pady=(0, 18))
         main.columnconfigure(0, weight=1)
         main.rowconfigure(1, weight=1)
-        self.room_title = label(main, "", 13, TEAL, anchor="w")
-        self.room_title.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        room_header = tk.Frame(main, bg=BG)
+        room_header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        self.room_title = label(room_header, "", 11, TEAL, anchor="w")
+        self.room_title.pack(side="left", fill="x", expand=True)
+        self.look_buttons = []
+        for turn, text in ((-1, "↶ OLHAR"), (1, "OLHAR ↷")):
+            btn = button(room_header, text, lambda d=turn: self.look(d))
+            btn.configure(font=(FONT, 9, "bold"), padx=8, pady=5)
+            btn.pack(side="left", padx=(4, 0))
+            self.look_buttons.append(btn)
         self.scene = tk.Canvas(main, bg=BG, height=320, highlightthickness=1,
                                highlightbackground="#28364c")
         self.scene.grid(row=1, column=0, sticky="nsew")
         self.scene.bind("<Motion>", self.motion)
         self.scene.bind("<Leave>", lambda e: setattr(self, "hover", None))
         self.scene.bind("<Button-1>", self.scene_click)
+        self.renderer = RoomScene(self.scene)
 
         doors = tk.Frame(main, bg=BG)
         doors.grid(row=2, column=0, sticky="ew", pady=8)
@@ -183,7 +160,7 @@ class Expedition(tk.Frame):
         self.map.pack(fill="x")
         self.map.bind("<Button-1>", self.map_click)
         self.map_positions = {}
-        label(side, "Ciano: você · cheia: concluída · X: núcleo\nClique numa vizinha · Alt + setas",
+        label(side, "Ciano: você · cheia: concluída · X: núcleo\nAlt + setas: mover · Alt + Q/E: olhar",
               9, MUTED, justify="left").pack(anchor="w", pady=6)
         self.roster = label(side, "", 10, justify="left", anchor="w")
         self.roster.pack(fill="x", pady=(4, 6))
@@ -198,6 +175,10 @@ class Expedition(tk.Frame):
         for key, portal in (("Left", 0), ("Up", 1), ("Right", 2), ("Down", 3)):
             sequence = f"<Alt-{key}>"
             binding = app.bind(sequence, lambda e, p=portal: self.navigate(p))
+            self.nav_bindings.append((sequence, binding))
+        for key, turn in (("q", -1), ("e", 1)):
+            sequence = f"<Alt-{key}>"
+            binding = app.bind(sequence, lambda e, d=turn: self.look(d))
             self.nav_bindings.append((sequence, binding))
         self.refresh()
         self.frame()
@@ -221,18 +202,68 @@ class Expedition(tk.Frame):
         self.map.configure(height=max(80, min(240, event.height-used)))
 
     def enter(self, door):
-        if self.game.enter(door):
+        g = self.game
+        if self.transition or g.status != "playing" or g.remaining <= 0 or not g.current.cleared:
+            return
+        exits = g.exits()
+        if not isinstance(door, int) or not 0 <= door < len(exits):
+            return
+        if self.app.effects.get():
+            self.transition = {"type": "move", "start": time.monotonic(), "duration": .72,
+                               "target": exits[door].key,
+                               "portal": self.portal_targets().index(door), "back": False}
+            self.feedback.configure(text="Abrindo passagem…", fg=TEAL)
+            self.refresh()
+        else:
+            self._arrive(exits[door].key)
+
+    def _arrive(self, target, back=False):
+        exits = [room.key for room in self.game.exits()]
+        moved = self.game.back() if back else self.game.enter(exits.index(target)) if target in exits else False
+        if moved:
             self.resume_at = 0
             self.feedback.configure(text=ROOMS[self.game.current.kind][1], fg=MUTED)
             self.refresh()
 
-    def portal_targets(self):
+    def relative_portals(self, facing=None):
+        direction = self.facing if facing is None else facing
+        return [COMPASS[(direction+offset) % 4] for offset in (-1, 0, 1, 2)]
+
+    def portal_targets(self, facing=None):
         """Match visible portals to actual adjacent rooms, never to a lane."""
         g = self.game
         exits = g.exits()
         return [next((i for i, room in enumerate(exits)
                       if room.key == (g.current.x + dx, g.current.y + dy)), None)
-                for _, _, (dx, dy) in PORTALS]
+                for _, _, (dx, dy) in self.relative_portals(facing)]
+
+    def look(self, turn):
+        if self.transition or self.game.status != "playing" or self.game.remaining <= 0:
+            return "break"
+        target = (self.facing + turn) % 4
+        if self.app.effects.get():
+            self.transition = {"type": "look", "start": time.monotonic(), "duration": .34,
+                               "from": self.facing, "to": target, "turn": turn}
+        else:
+            self.facing = target
+        self.refresh()
+        return "break"
+
+    def advance_transition(self, now):
+        transition = self.transition
+        if not transition:
+            return
+        if self.game.status != "playing":
+            self.transition = None
+            return
+        if self.app.effects.get() and now < transition["start"] + transition["duration"]:
+            return
+        self.transition = None
+        if transition["type"] == "look":
+            self.facing = transition["to"]
+            self.refresh()
+        else:
+            self._arrive(transition["target"], transition["back"])
 
     def navigate(self, portal):
         target = self.portal_targets()[portal]
@@ -248,9 +279,17 @@ class Expedition(tk.Frame):
                 return
 
     def back(self):
-        if self.game.back():
-            self.feedback.configure(text="De volta à sala anterior. Você pode explorar outra rota.", fg=MUTED)
+        g = self.game
+        if self.transition or not g.history or not g.current.cleared or g.status != "playing" or g.remaining <= 0:
+            return
+        target = g.history[-1]
+        if self.app.effects.get():
+            index = [room.key for room in g.exits()].index(target)
+            self.transition = {"type": "move", "start": time.monotonic(), "duration": .72,
+                               "target": target, "portal": self.portal_targets().index(index), "back": True}
             self.refresh()
+        else:
+            self._arrive(target, back=True)
 
     def submit(self):
         if not self.game.question:
@@ -278,13 +317,13 @@ class Expedition(tk.Frame):
     def refresh(self):
         g = self.game
         playing = g.status == "playing"
-        ready = playing and g.current.cleared
+        ready = playing and g.current.cleared and not self.transition
         self.room_title.configure(text=f"SETOR {g.current.x:+d}, {g.current.y:+d}  /  "
                                   f"{ROOMS[g.current.kind][0].upper()}")
         exits = g.exits()
         targets = self.portal_targets()
         for i, btn in enumerate(self.door_buttons):
-            direction = PORTALS[i][1]
+            direction = self.relative_portals()[i][1]
             room = exits[targets[i]] if targets[i] is not None else None
             hint = "Concluída" if room and room.cleared else ROOMS[room.kind][1] if room else "Sem passagem"
             if room and room.kind == "elite" and not room.cleared:
@@ -293,10 +332,16 @@ class Expedition(tk.Frame):
                           fg=ROOMS[room.kind][2] if room else MUTED,
                           state="normal" if ready and room else "disabled")
         self.back_btn.configure(state="normal" if ready and g.history else "disabled")
+        for btn in self.look_buttons:
+            btn.configure(state="normal" if playing and not self.transition else "disabled")
         self.answer.configure(state="normal" if g.question and playing else "disabled")
         self.submit_btn.configure(state="normal" if g.question and playing else "disabled")
+        if g.question is None:
+            self._shown_question = None
         if g.question:
-            self.answer.delete(0, "end")
+            if self._shown_question is not g.question:
+                self.answer.delete(0, "end")
+                self._shown_question = g.question
             self.q_text.configure(text=g.question["question"])
             self.answer.focus_set()
         elif not playing:
@@ -308,6 +353,7 @@ class Expedition(tk.Frame):
             self.q_text.configure(text="Prepare-se para o próximo desafio…")
         if not playing:
             self.finished = True
+            self.transition = None
             self.particles.clear()
         self.draw_map()
 
@@ -340,7 +386,7 @@ class Expedition(tk.Frame):
                                fill=color if room.cleared or current else BG, outline=color,
                                width=1, tags=("room", f"room:{key[0]}:{key[1]}"))
             if radius >= 5:
-                c.create_text(x, y, text="•" if current else SYMBOLS[room.kind],
+                c.create_text(x, y, text=("↑", "→", "↓", "←")[self.facing] if current else SYMBOLS[room.kind],
                               fill=BG if room.cleared or current else color, font=(FONT, 8, "bold"))
         c.create_text(w-8, 10, text="N ↑", anchor="ne", fill=MUTED, font=(FONT, 8))
         self.map_title.configure(text=f"PLANTA / {len(g.visited)} SALAS VISITADAS")
@@ -355,12 +401,11 @@ class Expedition(tk.Frame):
 
     @staticmethod
     def door_bounds():
-        return ((.05, .26, .24, .77), (.40, .23, .60, .67), (.76, .26, .95, .77),
-                (.37, .83, .63, .96))
+        return DOOR_BOUNDS
 
     def motion(self, event):
         self.hover = self.door_at(event)
-        self.scene.configure(cursor="hand2" if self.hover is not None and self.game.current.cleared else "")
+        self.scene.configure(cursor="hand2" if self.hover is not None and self.game.current.cleared and not self.transition else "")
 
     def scene_click(self, event):
         door = self.door_at(event)
@@ -371,76 +416,46 @@ class Expedition(tk.Frame):
         c, g = self.scene, self.game
         c.delete("all")
         w, h = c.winfo_width(), c.winfo_height()
-        def polygon(points, **kw):
-            return c.create_polygon(*[v * (w if i % 2 == 0 else h) for i, v in enumerate(points)], **kw)
-        def line(points, **kw):
-            return c.create_line(*[v * (w if i % 2 == 0 else h) for i, v in enumerate(points)], **kw)
         def text(x, y, value, color=MUTED, size=10, **kw):
             return c.create_text(x*w, y*h, text=value, fill=color, font=(FONT, size), **kw)
-        polygon([0,0,1,0,.72,.18,.28,.18], fill="#0a141b")
-        polygon([0,0,.28,.18,.28,.70,0,1], fill="#16262e")
-        polygon([1,0,.72,.18,.72,.70,1,1], fill="#102029")
-        polygon([.28,.18,.72,.18,.72,.70,.28,.70], fill="#1b3039")
-        polygon([0,1,.28,.70,.72,.70,1,1], fill="#0a171d")
-        # Structural panels and floor grid retain depth without fantasy props.
-        for y in (.31, .51, .70):
-            line([.28,y,.72,y], fill="#29444d")
-            line([0,y+.05,.28,y], fill="#28404a")
-            line([1,y+.05,.72,y], fill="#213944")
-        for x in (.28, .38, .62, .72):
-            line([x,.18,x,.70], fill="#2c4650")
-        for x in (-.8, -.2, .3, .7, 1.2, 1.8):
-            line([.5,.60,x,1], fill="#1e3640")
-        for y in (.75, .85, .98):
-            line([0,y,1,y], fill="#203741")
-        for x, endx in ((.29, .03), (.71, .97)):
-            line([x,.70,endx,1], fill="#22757a", width=2)
-            line([x,.18,endx,0], fill="#22757a", width=2)
+        facing = self.facing
+        opening = None
+        camera = (1.0, 0.0, 0.0)
+        if self.transition:
+            action = self.transition
+            progress = min(1.0, max(0.0, (now-action["start"])/action["duration"]))
+            if action["type"] == "look":
+                half = progress*2 if progress < .5 else (1-progress)*2
+                shift = half*half*(3-2*half)*.24
+                facing = action["from"] if progress < .5 else action["to"]
+                # Overscan keeps the room covering the viewport throughout the turn.
+                camera = (1.0 + 2*shift, -action["turn"]*shift if progress < .5 else action["turn"]*shift, 0.0)
+            else:
+                opening = (action["portal"], min(1.0, progress/.42))
+                walk = max(0.0, (progress-.42)/.58)
+                smooth = walk*walk*(3-2*walk)
+                direction = action["portal"]
+                zoom = 1 + smooth*(1.7 if direction != 3 else -.12)
+                # Steer the vanishing point toward the chosen doorway as we step.
+                shift = (.42 if direction == 0 else -.42 if direction == 2 else 0)*smooth
+                camera = (zoom, shift, math.sin(walk*math.pi*2)*.012)
         exits = g.exits()
-        targets = self.portal_targets()
-        for i, (left, top, right, bottom) in enumerate(self.door_bounds()):
-            room = exits[targets[i]] if targets[i] is not None else None
-            center = (left+right)/2
-            if room is None:
-                if i != 3:
-                    polygon([left,top,right,top,right,bottom,left,bottom],
-                            fill="#172932", outline="#29434d")
-                    line([left+.03,top+.04,right-.03,bottom-.04], fill="#263e48")
-                    text(center, (top+bottom)/2, "SEM PASSAGEM", MUTED, 8)
-                continue
-            color = ROOMS[room.kind][2]
-            active = g.current.cleared and g.status == "playing"
-            outline = color if active else "#48606a"
-            width = 3 if self.hover == i and active else 1
-            polygon([left,top,right,top,right,bottom,left,bottom],
-                    fill="#070e13", outline=outline, width=width)
-            if i == 3:
-                text(center, (top+bottom)/2, "S ↓  PASSAGEM ATRÁS", outline, 9)
-                continue
-            # A visible nested frame opens a view into the next corridor.
-            inset = .022
-            polygon([left+inset,top+.035,right-inset,top+.035,
-                     right-inset,bottom-.03,left+inset,bottom-.03],
-                    fill="#0b1c24", outline="#24434c")
-            line([left,bottom,center,bottom-.12,right,bottom], fill="#28515b")
-            if not active:
-                for j in range(1, 4):
-                    yy = top + (bottom-top)*j/4
-                    line([left+.01,yy,right-.01,yy], fill="#35505c", width=2)
-            text(center, top+.09, PORTALS[i][0], outline, 15)
-            text(center, (top+bottom)/2, SYMBOLS[room.kind], outline, 20)
-            text(center, bottom-.045, "LIVRE" if room.cleared else "DESAFIO", outline, 8)
-            text(center, bottom+.035, ROOMS[room.kind][0].upper(), color, 9)
-        text(.03,.06, "VISTA FIXA / NORTE ↑", TEAL, 9, anchor="w")
-        text(.97,.06, f"{len(exits)} PASSAGENS", MUTED, 9, anchor="e")
-        text(.5,.14, "RESOLVA O TERMINAL PARA EXPLORAR" if not g.current.cleared
-             else "ÁREA LIBERADA / ESCOLHA A ROTA", MUTED, 9)
+        targets = self.portal_targets(facing)
+        compass = self.relative_portals(facing)
+        portals = []
+        for i, index in enumerate(targets):
+            room = exits[index] if index is not None else None
+            portals.append(None if room is None else {
+                "label": ROOMS[room.kind][0], "compass": compass[i][0],
+                "color": ROOMS[room.kind][2], "cleared": room.cleared})
+        self.renderer.draw(room_key=g.current.key, kind=g.current.kind, portals=portals,
+                           facing=COMPASS[facing][1], locked=not g.current.cleared,
+                           opening=opening, camera=camera, now=now,
+                           effects=self.app.effects.get())
         if not g.current.cleared and g.status == "playing":
             color = ROOMS[g.current.kind][2]
-            cy = .51 + (math.sin(now*2)*.008 if self.app.effects.get() else 0)
-            polygon([.455,cy-.08,.545,cy-.08,.545,cy+.08,.455,cy+.08],
-                    fill="#10252e", outline=color, width=2)
-            text(.5,cy, "?" if g.current.kind != "boss" else str(3-g.current.hits), color, 22)
+            c.create_rectangle(w*.46,h*.43,w*.54,h*.60,fill="#10252e",outline=color,width=2)
+            text(.5,.51,"?" if g.current.kind != "boss" else str(3-g.current.hits),color,20)
         if self.app.effects.get():
             for x, y, vx, vy, life, color in self.particles:
                 r = max(1, life*3)
@@ -461,6 +476,7 @@ class Expedition(tk.Frame):
         result = self.game.tick()
         if result:
             self.result(result)
+        self.advance_transition(now)
         if self.resume_at and now >= self.resume_at:
             self.resume_at = 0
             self.game.ask()

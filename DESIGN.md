@@ -90,6 +90,35 @@ Critérios de validação desta rodada:
 - Tempo, erros, combo e cooperação local continuam funcionando.
 - Perguntas longas e o mapa continuam legíveis na janela mínima suportada.
 
+## Rodada 2: menu ilustrado
+
+O menu passa a apresentar a identidade de ECOS com uma ilustração original de um
+núcleo de dados e corredores subterrâneos, em vez de concentrar toda a tela em um
+formulário. A arte ocupa uma área própria; a configuração da expedição permanece
+separada, com cartões de dificuldade, seleção rápida de equipe e uma ação de
+entrada em destaque. Os textos são desenhados pela interface, não incorporados
+na imagem.
+
+Partículas e grafismos leves dão movimento ao cenário. O controle de efeitos
+desliga também o movimento do menu, e sair da tela cancela seus callbacks.
+A imagem acompanha o projeto, sem dependências de rede; um desenho procedural
+mantém a tela funcional caso o arquivo não esteja disponível. Origem e prompt
+da arte estão registrados em `assets/README.md`.
+
+## Rodada 3: materiais, portas e câmera
+
+As salas usam um renderizador próprio em `room_scene.py`, com concreto, fissuras,
+placas e desgaste procedurais estáveis para cada sala. Portas metálicas possuem
+batentes, painéis, maçanetas e trilhos, abrindo uma vista do corredor antes da
+passagem. São desenhos em perspectiva no Canvas, sem dependências adicionais.
+
+A câmera pode girar em quatro orientações. Botões de direção, portas e seta do
+minimapa acompanham esse giro. Uma transição encadeia abertura e caminhada;
+o desafio seguinte começa somente na chegada. O relógio geral continua correndo,
+ações duplicadas ficam bloqueadas durante o deslocamento e o fim da partida
+cancela a transição. Olhar mantém a pergunta e o texto digitado. Movimento reduzido
+torna a navegação imediata.
+
 ## Próximas rodadas propostas
 
 1. **Ritmo e identidade das salas.** Ajustar distâncias, duração da expedição,
