@@ -7,11 +7,11 @@ abriga ECO, uma IA que transforma cada passagem numa prova. A cada expedição n
 uma masmorra nova. De 1 a 4 jogadores dividem a mesma tela e a mesma masmorra,
 mas cada um por si: o primeiro a escapar pelo núcleo vence.
 
-Execute `python .` ou `python dungeon_ui.py` (Python 3.10+ com Tkinter, sem
+Na pasta do projeto, execute `python src` (Python 3.10+ com Tkinter, sem
 outras dependências). No Windows, dê dois cliques em `jogar.cmd`; ele usa o
 Python integrado ao Codex quando disponível, ou o comando `python` do sistema.
-O banco de perguntas atual está em inglês, em `easy_questions.json`,
-`medium_questions.json` e `hard_questions.json`. Se um desses arquivos não
+O banco de perguntas atual está em inglês, em `assets/questions/` (`easy.json`,
+`medium.json` e `hard.json`). Se um desses arquivos não
 carregar (um erro de digitação no JSON, por exemplo), o jogo usa 3 perguntas de
 reserva e o menu avisa “BANCO DE PERGUNTAS INCOMPLETO”.
 
@@ -183,7 +183,14 @@ em silêncio. O mudo fica no menu, no HUD (“SOM”) e em **Alt + M**.
 
 ## Para desenvolvedores
 
-| Módulo | Papel |
+| Pasta | Conteúdo |
+|---|---|
+| `src/` | O jogo: todos os módulos abaixo |
+| `tests/` | Testes, um arquivo por módulo |
+| `assets/questions/` | Bancos de perguntas por nível |
+| `docs/` | Histórico de design, ADRs e instruções para agentes |
+
+| Módulo em `src/` | Papel |
 |---|---|
 | `questions.py` | Banco de perguntas por nível, sem repetição na expedição |
 | `dungeon_map.py` | Planta ortogonal com bifurcações, ciclos e salas sem saída |
@@ -201,7 +208,7 @@ em silêncio. O mudo fica no menu, no HUD (“SOM”) e em **Alt + M**.
 | `menu_ui.py`, `menu_art.py` | Menu animado e suas camadas |
 | `motion.py` | Curvas de animação |
 
-Rode os testes com:
+Rode os testes na raiz do projeto com:
 
 ```bash
 python -m unittest -v
@@ -211,4 +218,4 @@ Os testes de interface (`test_dungeon_ui`, `test_menu_ui`) precisam de um displa
 Tk; os demais rodam sem tela. O vocabulário do domínio (Dungeon, Expedition,
 Guardian, Tier, Buff…) está em [CONTEXT.md](CONTEXT.md), e as decisões de
 arquitetura em [docs/adr/](docs/adr/). O histórico de design e as próximas rodadas
-estão em [DESIGN.md](DESIGN.md).
+estão em [docs/DESIGN.md](docs/DESIGN.md).

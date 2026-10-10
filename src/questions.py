@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 TIERS = ("easy", "medium", "hard")
+BANKS = Path(__file__).resolve().parent.parent / "assets" / "questions"
 FALLBACK = [
     {"question": "What is 2 + 2?", "answer": "4"},
     {"question": "What color is the sky on a clear day?", "answer": "blue"},
@@ -15,7 +16,7 @@ FALLBACK = [
 def load_tier(tier):
     """Return (questions, used_fallback) for a Tier's question file."""
     try:
-        data = json.loads((Path(__file__).parent / f"{tier}_questions.json").read_text(encoding="utf-8"))
+        data = json.loads((BANKS / f"{tier}.json").read_text(encoding="utf-8"))
         if isinstance(data, list) and data:
             return data, False
     except (OSError, ValueError):

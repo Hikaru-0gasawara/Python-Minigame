@@ -1,15 +1,15 @@
 """Bitmap font coverage, measuring, wrapping and drawing; no display needed."""
 
 import ast
-import json
 from pathlib import Path
 import unicodedata
 import unittest
 
 import font
+from questions import load_tier
 from pixels import Pix
 
-ROOT = Path(__file__).parent
+SRC = Path(__file__).resolve().parent.parent / "src"
 SCREEN_MODULES = ("dungeon.py", "dungeon_ui.py", "menu_ui.py", "questions.py", "scene.py")
 
 
@@ -17,10 +17,10 @@ def used_characters():
     """Every character of the question bank and of every string literal the screens use."""
     chars = set()
     for tier in ("easy", "medium", "hard"):
-        for q in json.loads((ROOT / f"{tier}_questions.json").read_text(encoding="utf-8")):
+        for q in load_tier(tier)[0]:
             chars |= set(q["question"]) | set(q["answer"])
     for name in SCREEN_MODULES:
-        for node in ast.walk(ast.parse((ROOT / name).read_text(encoding="utf-8"))):
+        for node in ast.walk(ast.parse((SRC / name).read_text(encoding="utf-8"))):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 chars |= set(node.value)
     return {c for c in chars if c.isprintable()}
@@ -79,7 +79,3 @@ class FontTests(unittest.TestCase):
         lit = {(i % pix.w, i // pix.w) for i, c in enumerate(pix.px) if c == 10}
         shade = {(i % pix.w, i // pix.w) for i, c in enumerate(pix.px) if c == 1}
         self.assertTrue(all((x + 1, y + 1) in lit | shade for x, y in lit))
-
-
-if __name__ == "__main__":
-    unittest.main()

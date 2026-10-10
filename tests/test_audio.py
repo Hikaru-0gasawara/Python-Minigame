@@ -53,7 +53,3 @@ class AudioTests(unittest.TestCase):
         sound.toggle_mute()
         self.assertIsNone(sound.player)
         self.assertFalse((self.folder / "never").exists())  # nothing is written either
-
-
-if __name__ == "__main__":
-    unittest.main()

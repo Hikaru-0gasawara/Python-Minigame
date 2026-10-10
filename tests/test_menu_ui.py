@@ -98,6 +98,15 @@ class MenuTests(unittest.TestCase):
         self.key("Right")
         self.assertEqual(menu.hud["records"], ["RECORDES · PESADELO", "1. 1:15  1J  0000-0007"])
 
+    def test_the_records_file_is_read_once_per_difficulty(self):
+        with mock.patch.object(self.app.records, "top", wraps=self.app.records.top) as top:
+            for key in ("Down", "Down", "Up", "Up"):     # moving between rows redraws the menu
+                self.key(key)
+            self.assertEqual(top.call_count, 0)          # already read when the menu opened
+            self.key("Right")
+            self.key("Left")
+            self.assertEqual(top.call_count, 1)          # Guerreiro once; Aventureiro was kept
+
     def test_mute_and_reduced_motion_toggle_from_the_column(self):
         menu = self.app.screen
         self.go_to("sound")
@@ -172,7 +181,3 @@ class MenuTests(unittest.TestCase):
         self.app.update()
         self.assertIsNone(self.app.screen.animation_job)
         self.assertEqual(len(self.app.effects.trace_info()), trace_count)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -59,7 +59,3 @@ class RecordsTests(unittest.TestCase):
         self.path.mkdir()                            # a folder where the file should be
         self.assertEqual(self.records.submit(EASY, 30, 1, 1), 1)
         self.assertEqual(self.records.top(EASY), [])
-
-
-if __name__ == "__main__":
-    unittest.main()

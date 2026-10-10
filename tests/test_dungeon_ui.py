@@ -1,6 +1,5 @@
 """Tk integration checks for the full-window pixel screen. Requires a Tk display."""
 
-import json
 from pathlib import Path
 import tempfile
 import time
@@ -12,11 +11,12 @@ from audio import Audio
 import font
 import hud
 import pixel_view
+from questions import load_tier
 from dungeon import DEBUFFS, EXIT_HITS, Expedition
 from menu_ui import Setup
 from records import Records
 from scene import relative_portals, sector_of
-from test_dungeon import make_combat
+from .test_dungeon import make_combat
 from dungeon_ui import (ALT_MASK, ARRIVE, MESSAGE_TIME, OPEN, REACT, STEP, STEP_ASIDE, TURN_FADE, WALK, DungeonApp,
                         ExpeditionScreen, ResultsScreen)
 from room_art import DOOR_STEPS, GUARDIAN_ASIDE, H, W
@@ -112,9 +112,8 @@ class DungeonUITests(unittest.TestCase):
             self.assertTrue(all(font.measure(line) <= limit for line in lines), lines)
 
     def test_every_question_in_the_bank_fits_the_box_and_long_ones_are_capped(self):
-        root = Path(__file__).parent
         for tier in ("easy", "medium", "hard"):
-            for q in json.loads((root / f"{tier}_questions.json").read_text(encoding="utf-8")):
+            for q in load_tier(tier)[0]:
                 self.assertLessEqual(len(font.wrap(q["question"], hud.BOX_WIDTH - 8)), 2, q["question"])
         screen = self.start_seeded(players=4)
         screen.enter(0)
@@ -849,7 +848,3 @@ class DungeonUITests(unittest.TestCase):
         results.on_key(SimpleNamespace(keysym="Return"))
         self.app.update()
         self.assertIsInstance(self.app.screen, Setup)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -126,6 +126,7 @@ class Setup(tk.Frame):
         self.seed = ""
         self.focus = 0
         self.bank_broken = QuestionBank().fallback
+        self.tops = {}                  # each Difficulty's Records, read once: refresh runs on every key
         self.animation_job = None
         self._dead = False
         self._help = None
@@ -227,10 +228,12 @@ class Setup(tk.Frame):
         """Rebuild the panels: the subtitle, the options and the Records."""
         if self._dead:
             return
+        if self.difficulty not in self.tops:
+            self.tops[self.difficulty] = self.app.records.top(self.difficulty)
         pieces = {"subtitle": caption("A MASMORRA DOS ECOS", hud.GOLD, TITLE_AT[1] + 36, x=TITLE_AT[0] + 1),
                   "column": column(self.difficulty, self.players, self.seed, self.app.audio.muted,
                                    self.app.effects.get(), self.focus, self.bank_broken),
-                  "records": records_panel(self.app.records.top(self.difficulty), self.difficulty)}
+                  "records": records_panel(self.tops[self.difficulty], self.difficulty)}
         self._photos = [(tk.PhotoImage(master=self.canvas, data=piece.pix.png()), piece.x, piece.y)
                         for piece in pieces.values()]
         self.pieces = pieces

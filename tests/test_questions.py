@@ -30,7 +30,3 @@ class QuestionBankTests(unittest.TestCase):
         question = {"question": "?", "answer": " Python "}
         self.assertTrue(is_correct(question, "python  "))
         self.assertFalse(is_correct(question, "java"))
-
-
-if __name__ == "__main__":
-    unittest.main()

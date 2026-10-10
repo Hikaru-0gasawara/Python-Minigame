@@ -631,6 +631,3 @@ class DungeonTests(unittest.TestCase):
         self.assertEqual(g.status, "won")
         self.now += 100
         self.assertEqual(g.elapsed, 50)
-
-if __name__ == "__main__":
-    unittest.main()

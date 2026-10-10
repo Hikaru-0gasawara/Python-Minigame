@@ -27,7 +27,3 @@ class DialogueTests(unittest.TestCase):
         self.assertEqual(d.voiced(0, 3 / CHARS_PER_SECOND), 2)  # "ab " has two letters
         self.assertEqual(d.voiced(3, 1), 2)                     # then "cd"
         self.assertEqual(d.voiced(5, 2), 0)
-
-
-if __name__ == "__main__":
-    unittest.main()

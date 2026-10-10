@@ -4,12 +4,12 @@ Este documento registra a direção do jogo e um roteiro para evoluí-lo parte p
 parte. As etapas futuras são propostas; sua presença aqui não significa que já
 foram implementadas. As rodadas 1 a 3 descrevem o crawler cooperativo, com
 pontuação, combo e relógio compartilhados. A rodada 4 o transformou numa corrida
-competitiva (ver [ADR-0001](docs/adr/0001-competitive-race.md)) e removeu o
-tabuleiro clássico ([ADR-0002](docs/adr/0002-crawler-is-the-whole-game.md)). A
+competitiva (ver [ADR-0001](adr/0001-competitive-race.md)) e removeu o
+tabuleiro clássico ([ADR-0002](adr/0002-crawler-is-the-whole-game.md)). A
 rodada 5 levou tudo para pixel art desenhada por código, dentro do mundo de ECO
-([ADR-0004](docs/adr/0004-pixel-art-drawn-by-code.md)), e passou a guardar
-recordes ([ADR-0003](docs/adr/0003-records-stored-locally.md)). O vocabulário do
-domínio está em [CONTEXT.md](CONTEXT.md).
+([ADR-0004](adr/0004-pixel-art-drawn-by-code.md)), e passou a guardar
+recordes ([ADR-0003](adr/0003-records-stored-locally.md)). O vocabulário do
+domínio está em [CONTEXT.md](../CONTEXT.md).
 
 ## Leitura das sete imagens
 

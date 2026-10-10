@@ -9,7 +9,7 @@ from palette import CYAN, RED
 from room_art import (BACK_DOOR, BX1, DOOR_STEPS, DOOR_STYLES, GUARDIAN_STATES, H, LIGHTS, W, back_door,
                       build_background, guardian, side_door)
 from scene import SECTOR_NAMES, decorations, portal_targets, scene_for, sector_of
-from test_dungeon import make_combat
+from .test_dungeon import make_combat
 
 
 class SceneModelTests(unittest.TestCase):
@@ -221,7 +221,3 @@ class PixelArtTests(unittest.TestCase):
             self.assertIn(None, px)
             self.assertTrue({c for c in px if c is not None} <= set(range(len(PALETTE))))
         self.assertNotEqual(back_door("shallow", True).px, back_door("shallow", False).px)
-
-
-if __name__ == "__main__":
-    unittest.main()
