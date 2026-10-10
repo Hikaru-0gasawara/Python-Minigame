@@ -99,6 +99,7 @@ class Player:
     skip_next: bool = False
     extra_moves: int = 0
     held: str = None
+    armed: set = field(default_factory=set)   # alone: Rooms a Retreat pushed this player out of
 
 
 def random_seed():
@@ -222,13 +223,23 @@ class Expedition:
             self.player = (self.player + 1) % len(self.players)
 
     def _send_back(self, player):
-        """Retreat without spending a Turn of its own: the penalty already ends it."""
+        """Retreat without spending a Turn of its own: the penalty already ends it.
+
+        Alone, walking straight back would cost nothing, so the Room left behind is Armed.
+        """
         if player.came_from is not None:
+            if len(self.players) == 1:
+                player.armed.add(player.position)
             key, player.came_from = player.came_from, player.position
             self._arrive(player, key)
 
+    def actual(self, effect):
+        """The Debuff a player really suffers: alone, losing a Turn costs nothing, so it costs a Life."""
+        return "life" if effect == "skip" and len(self.players) == 1 else effect
+
     def _apply(self, player, effect):
         """Apply a Buff or Debuff and return what actually happened."""
+        effect = self.actual(effect)
         if effect == "life":
             player.lives -= 1
             if player.lives <= 0:
@@ -265,8 +276,17 @@ class Expedition:
         self._arrive(player, key)
         room = self.current
         self.event = None
+        if key in player.armed:
+            player.armed.discard(key)
+            self._effect(player, self.rng.choice(DEBUFFS))
+            self.event["text"] = f"sala armada: {self.event['text']}"
+            if player.position != key:          # pushed out again, or back to the Entrance
+                self._end_turn()
+                return
         if room.kind in GUARDED and not self.has_cleared(room):
+            sprung = self.event
             self.ask()
+            self.event = sprung                  # an Armed room still gets announced before the Question
             return
         player.cleared.add(key)
         # Chests and traps fire once per player; a Sanctuary heals on every visit.

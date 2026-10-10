@@ -17,7 +17,7 @@ O banco de perguntas atual está em inglês.
 Tudo é pixel art desenhada pelo próprio código numa tela de 320×200, com uma
 paleta fixa de 32 cores, e ampliada pelo maior fator inteiro que cabe na janela.
 Quando o formato da janela não bate, sobram faixas pretas, e o pixel nunca é
-esticado. Não há arquivos de imagem: salas, objetos, fonte e menu são montados na
+esticado; a janela abre em 960×600, a escala 3 exata. Não há arquivos de imagem: salas, objetos, fonte e menu são montados na
 abertura do jogo.
 
 ECO fala pelos **guardiões**, estátuas encapuzadas com uma tela no rosto. O
@@ -56,6 +56,10 @@ o guardião desperta.
   | Média | perde a próxima vez |
   | Difícil | recua uma sala |
 
+- **Jogando sozinho**, perder a vez não custaria nada, então custa **−1 vida**
+  (também nas armadilhas e mímicos). E a sala de onde você foi empurrado para
+  trás fica **armada**: ao entrar nela de novo, ela dispara um debuff sorteado,
+  uma vez só. O mapa a mostra em vermelho e a porta avisa “Armada!”.
 - **Vidas:** cada jogador tem 3. Sem vidas, volta à entrada com as 3 vidas de
   volta, mantendo o mapa e as salas já liberadas.
 - **Núcleo (saída):** o guardião do núcleo faz 3 perguntas, uma por turno, e
@@ -107,10 +111,13 @@ Troca são usadas no cartão do jogador da vez, clicando no rival (J2, J3…) ou
 
 ### A tela e os controles
 
-A janela inteira é a masmorra. No canto superior esquerdo ficam o jogador da vez,
-a sala, o setor e para onde ele olha. No canto superior direito fica o **mapa**
-do jogador da vez, com a seed. Embaixo ficam os cartões dos jogadores, e o da
-vez é maior e traz as ações.
+A janela inteira é a masmorra, e o HUD ocupa só as bordas. No canto superior
+esquerdo ficam o jogador da vez, a sala e o setor. No canto superior direito fica
+o **mapa** do jogador da vez, com a seed; um traço branco na sala atual aponta
+para onde a câmera olha. Embaixo, cada jogador tem um cartão de uma linha com
+vidas e profundidade; o da vez vem marcado com “→” e ganha uma segunda linha com
+as ações. Avisos aparecem acima dos cartões e somem sozinhos depois de alguns
+segundos.
 
 - **Mover:** clique numa porta da cena (passar o mouse diz o que há atrás dela),
   na aba “↓ … · ATRÁS” no alto da tela para a porta às suas costas, numa sala
@@ -120,7 +127,9 @@ vez é maior e traz as ações.
 - **Recuar:** “↶ RECUAR” no cartão ou **Alt + R**.
 - **Responder:** é só digitar (Backspace apaga) e pressionar **Enter**.
 - **Som:** “SOM ●/○”, embaixo do mapa, ou **Alt + M**.
-- **Esc** volta ao menu.
+- **Esc** pausa: a cena congela, a pergunta fica escondida e nem o tempo da
+  pergunta nem o tempo da expedição correm. Na pausa, **Continuar** (ou Esc de
+  novo) volta ao jogo, e **Sair para o menu** abandona a expedição.
 
 O mapa é só seu: mostra o que você descobriu, troca a cada turno e marca a
 posição de todos os rivais. Salas ainda não visitadas aparecem como silhuetas
@@ -129,9 +138,10 @@ pontilhadas; baús aparecem em âmbar, e nem todo baú é o que parece.
 ### Menu
 
 O menu é uma cena animada: torres de servidores em paralaxe, o núcleo pulsante de
-ECO, cabos soltando faíscas e uma falha de imagem de vez em quando. A coluna da
-esquerda tem **Dificuldade**, **Jogadores**, **Seed**, **Som**, **Movimento** e
-**ENTRAR**:
+ECO, cabos soltando faíscas e uma falha de imagem de vez em quando. À esquerda
+ficam o título e as opções: **Dificuldade**, **Jogadores**, **Seed**, **Som**,
+**Movimento** e **ENTRAR**. À direita ficam o núcleo e, no canto inferior, os
+**recordes** da dificuldade escolhida.
 
 - **↑ ↓** ou **Tab** escolhem a linha, **← →** mudam o valor, **Enter** ou
   **espaço** confirmam. O mouse também funciona.
@@ -139,8 +149,6 @@ esquerda tem **Dificuldade**, **Jogadores**, **Seed**, **Som**, **Movimento** e
 - **F1** abre o “Como jogar”.
 - **Movimento: reduzido** troca portas, zoom, desvanecimentos, diálogo letra por
   letra, partículas e a animação do menu por cortes imediatos.
-
-No canto inferior direito ficam os **recordes** da dificuldade escolhida.
 
 ### Seeds
 

@@ -20,12 +20,13 @@ KIND_INK = {"combat": 28, "elite": 15, "treasure": 16, "mimic": 14, "trap": 24, 
 SECTOR_NAMES = {"shallow": "RASO", "middle": "MEIO", "deep": "FUNDO"}
 TIER_NAMES = {"easy": "FÁCIL", "medium": "MÉDIA", "hard": "DIFÍCIL"}
 POWER_NAMES = {"ward": "ESCUDO", "hex": "MALDIÇÃO", "swap": "TROCA"}
-MAP_AT, MAP_SIZE = (236, 2), (82, 52)
+MAP_SIZE = (64, 40)
+MAP_AT = (W - MAP_SIZE[0] - 2, 2)
 TAB_CENTRE = 186          # between the Turn badge and the minimap, clear of the Guardian
-CARDS_TOP = H - 46
 BOX_WIDTH = 312
 MAX_QUESTION_LINES = 4
 ACTIONS = ("REVANCHE · MESMA SEED", "NOVA SEED", "MENU")
+PAUSE_ACTIONS = ("CONTINUAR", "SAIR PARA O MENU")
 
 
 @dataclass
@@ -62,21 +63,18 @@ def text_panel(lines, x, y, width=None, border=EDGE, centre=False):
     return Piece(p, x, y, [text for text, _ in lines])
 
 
-def badge(game, facing):
-    """Top-left: whose Turn it is, where they stand and which way they look."""
+def badge(game):
+    """Top-left, one line: whose Turn it is and where they stand; the Map shows which way they look."""
     room = game.current
     if game.status == "playing":
-        first = (f"J{game.player + 1} · SUA VEZ", PLAYER_INK[game.player])
+        text, ink = f"J{game.player + 1} · {ROOMS[room.kind][0].upper()} · {SECTOR_NAMES[sector_of(game.dungeon, room)]}", PLAYER_INK[game.player]
     else:
-        first = (f"J{game.winner + 1} VENCEU", GOLD)
-    return text_panel([first,
-                       (f"{ROOMS[room.kind][0].upper()} · {SECTOR_NAMES[sector_of(game.dungeon, room)]}", TEXT),
-                       (f"OLHANDO {COMPASS[facing][1]}  ESC MENU", MUTED)], 2, 2,
-                      border=first[1])
+        text, ink = f"J{game.winner + 1} VENCEU", GOLD
+    return text_panel([(text, ink)], 2, 2, border=ink)
 
 
-def minimap(game):
-    """Top-right: the active player's Map, rivals' positions and the Seed.
+def minimap(game, facing=0):
+    """Top-right: the active player's Map, which way they look, rivals' positions and the Seed.
 
     Returns the piece plus each revealed room's native centre, the corridors
     drawn, the rivals shown, each room's apparent kind and the cell size,
@@ -106,11 +104,12 @@ def minimap(game):
         kind = kinds[key] = game.appearance(game.dungeon.rooms[key])
         cx, cy = centres[key]
         x0, y0, x1, y1 = squares[key]
-        ink = PLAYER_INK[game.player] if key == me.position else KIND_INK[kind]
+        ink = PLAYER_INK[game.player] if key == me.position else KIND_INK["trap" if key in me.armed else kind]
         if key == me.position or key in me.visited:
             p.rect(x0, y0, x1, y1, ink)
-            if key == me.position:
-                p.set(cx, cy, TEXT)
+            if key == me.position:          # a needle from the centre towards where the camera looks
+                dx, dy = COMPASS[facing][2]
+                p.line(cx, cy, cx + dx * (cell // 2 - 1), cy + dy * (cell // 2 - 1), TEXT)
         else:
             for x in range(x0, x1 + 1):        # silhouettes: a dotted outline
                 for y in range(y0, y1 + 1):
@@ -129,52 +128,59 @@ def minimap(game):
 
 
 def cards(game, can_retreat):
-    """Bottom: one card per player; the active one is wider, taller and holds the actions."""
+    """Bottom: one slim card per player; the active one is marked "→", lit in its colour, and holds the actions."""
     n = len(game.players)
     active = game.player if game.status == "playing" else None
-    wide = 112 if n > 1 else 140
-    narrow = min(78, (W - 4 - wide - 3 * (n - 1)) // max(1, n - 1))
-    widths = [wide if i == active or n == 1 else narrow for i in range(n)]
-    left = (W - sum(widths) - 3 * (n - 1)) // 2
-    p = Pix(W, H - CARDS_TOP)
-    texts, regions = [], []
-    for i, player in enumerate(game.players):
-        w, ink = widths[i], PLAYER_INK[i]
-        is_active = i == active
-        top = 0 if is_active else 14
-        card = panel(w, H - CARDS_TOP - top, ink if is_active else EDGE)
-        tag = ("· SUA VEZ" if is_active else "★" if i == game.winner else "⏸" if player.skip_next
-               else "◆" if player.held else "")
-        title = f"J{i + 1} {hearts(player)} {tag}".rstrip()
-        status = f"↓{game.dungeon.rooms[player.position].depth}  X {player.exit_hits}/{EXIT_HITS}"
-        font.draw(card, 4, 1, title, ink, shadow=0)
-        font.draw(card, 4, 1 + font.LINE, status, TEXT if is_active else MUTED, shadow=0)
-        lines = [title, status]
-        if is_active:
-            row = 1 + 2 * font.LINE
-            x = 4
 
-            def chip(text, ink, action=None):
-                nonlocal x
-                width = font.draw(card, x, row, text, ink, shadow=0)
+    def title(i, short=False):
+        player = game.players[i]
+        tag = "★" if i == game.winner else "⏸" if player.skip_next else "◆" if player.held and i != active else ""
+        depth = "" if short else f" ↓{game.dungeon.rooms[player.position].depth}"
+        core = f" X{player.exit_hits}/{EXIT_HITS}" if player.exit_hits and not short else ""
+        return f"{'→ ' if i == active else ''}J{i + 1} {hearts(player)}{depth}{core} {tag}".rstrip()
+
+    chips = []                                  # (text, ink, action) on the active card's second line
+    if active is not None:
+        held = game.players[active].held
+        if can_retreat:
+            chips.append(("↶ RECUAR", TEXT, ("retreat",)))
+        if held:
+            chips.append(("◆ " + POWER_NAMES[held], GOLD, None))
+        if held in ("hex", "swap"):
+            chips += [(f"J{t + 1}", PLAYER_INK[t], ("buff", t)) for t in range(n) if t != active]
+    row = sum(font.measure(text) for text, _, _ in chips) + 4 * max(0, len(chips) - 1)
+    titles = [title(i) for i in range(n)]
+
+    def widths():
+        return [max(font.measure(t), row if i == active else 0) + 8 for i, t in enumerate(titles)]
+    if sum(widths()) + 3 * (n - 1) > W - 4:      # crowded: rivals keep only their lives and tag
+        titles = [t if i == active else title(i, short=True) for i, t in enumerate(titles)]
+    sizes = widths()
+    height = font.LINE + 3
+    tall = height + (font.LINE if chips else 0)
+    p = Pix(W, tall)
+    y = H - tall
+    piece = Piece(p, 0, y)
+    left = (W - sum(sizes) - 3 * (n - 1)) // 2
+    for i, w in enumerate(sizes):
+        lit = i == active
+        h = tall if lit else height
+        card = panel(w, h, PLAYER_INK[i] if lit else EDGE)
+        font.draw(card, 4, 1, titles[i], PLAYER_INK[i], shadow=0)
+        lines = [titles[i]]
+        if lit and chips:
+            x = 4
+            for text, ink, action in chips:
+                width = font.draw(card, x, 1 + font.LINE, text, ink, shadow=0)
                 if action:
-                    regions.append((action, (left + x - 1, CARDS_TOP + row, left + x + width, CARDS_TOP + row + font.HEIGHT)))
+                    top = y + tall - h + 1 + font.LINE
+                    piece.regions.append((action, (left + x - 1, top, left + x + width, top + font.HEIGHT)))
                 x += width + 4
-            if can_retreat:
-                chip("↶ RECUAR", TEXT, ("retreat",))
-            if player.held == "ward":
-                chip("◆ " + POWER_NAMES["ward"], GOLD)
-            elif player.held:
-                chip("◆", GOLD)
-                for t in range(n):
-                    if t != i:
-                        chip(f"J{t + 1}", PLAYER_INK[t], ("buff", t))
-            lines.append(f"{'↶ RECUAR ' if can_retreat else ''}"
-                         f"{'◆ ' + POWER_NAMES[player.held] if player.held else ''}".strip())
-        p.blit(card, left, top)
-        texts.append(lines)
+            lines.append(" ".join(text for text, _, _ in chips))
+        p.blit(card, left, tall - h)
+        piece.texts.append(lines)
         left += w + 3
-    return Piece(p, 0, CARDS_TOP, texts, regions)
+    return piece
 
 
 def spoken_lines(game):
@@ -192,7 +198,7 @@ def question_lines(game, typed, blink, shown=None):
     answer line only appears once everything has been said.
     """
     seconds = math.ceil(game.question_remaining)
-    miss = "ESCUDO ANULA" if game.active.held == "ward" else EFFECT_TEXT[PENALTIES[game.question_tier]].upper()
+    miss = "ESCUDO ANULA" if game.active.held == "ward" else EFFECT_TEXT[game.actual(PENALTIES[game.question_tier])].upper()
     meta = f"J{game.player + 1} · {TIER_NAMES[game.question_tier]} · ERRO: {miss} · {seconds}s"
     if game.current.kind == "exit":
         meta += f" · NÚCLEO {game.active.exit_hits}/{EXIT_HITS}"
@@ -205,19 +211,15 @@ def question_lines(game, typed, blink, shown=None):
     return lines + [(answer, PLAYER_INK[game.player])]
 
 
-def message_lines(game, message, ink, can_retreat):
-    if game.status != "playing":
-        return [(f"Jogador {game.winner + 1} escapou da masmorra!", GOLD)]
-    if game.can_leave():
-        hint = "ESCOLHA UMA PASSAGEM · ALT+SETAS: MOVER"
-    else:
-        hint = "O GUARDIÃO AGUARDA" + (" · ALT+R RECUA" if can_retreat else "")
-    return [(line, ink) for line in font.wrap(message, BOX_WIDTH - 8)[:2]] + [(hint, MUTED)]
+def message_lines(message, ink):
+    """A short note above the cards: at most two lines."""
+    return [(line, ink) for line in font.wrap(message, BOX_WIDTH - 8)[:2]]
 
 
-def answer_box(lines, bottom, border):
-    piece = text_panel(lines, (W - BOX_WIDTH) // 2, 0, BOX_WIDTH, border)
-    piece.y = bottom - piece.pix.h
+def answer_box(lines, bottom, border, width=BOX_WIDTH):
+    """Centred above `bottom`; without a width it fits its text."""
+    piece = text_panel(lines, 0, 0, width, border)
+    piece.x, piece.y = (W - piece.pix.w) // 2, bottom - piece.pix.h
     return piece
 
 
@@ -283,6 +285,26 @@ def results(game, rank, selected):
         piece.regions.append((("action", i), (piece.x + x, piece.y + top,
                                               piece.x + x + chip.pix.w - 1, piece.y + top + chip.pix.h - 1)))
         x += chip.pix.w + 4
+    return piece
+
+
+def pause_panel(game, selected):
+    """The pause menu: the Expedition at a glance and two entries; regions are (("pause", i), rect)."""
+    info = f"{game.name.upper()} · SEED {format_seed(game.seed)} · {duration(game.elapsed)}"
+    width = max(font.measure(info), *(font.measure(a) for a in PAUSE_ACTIONS)) + 24
+    p = panel(width, (3 + len(PAUSE_ACTIONS)) * font.LINE + 6, GOLD)
+    piece = Piece(p, (W - width) // 2, 0)
+    piece.y = (H - p.h) // 2
+    rows = [("PAUSA", GOLD), (info, MUTED), ("", TEXT)] + [(a, GOLD if i == selected else TEXT) for i, a in enumerate(PAUSE_ACTIONS)]
+    for i, (text, ink) in enumerate(rows):
+        y = 3 + i * font.LINE
+        choice = i - 3
+        if choice == selected:
+            p.rect(2, y - 1, width - 3, y + font.LINE - 2, EDGE)
+        font.draw(p, (width - font.measure(text)) // 2, y, text, ink, shadow=0)
+        if choice >= 0:
+            piece.regions.append((("pause", choice), (piece.x + 2, piece.y + y - 1, piece.x + width - 3, piece.y + y + font.LINE - 2)))
+        piece.texts.append(text)
     return piece
 
 

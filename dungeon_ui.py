@@ -11,7 +11,7 @@ from audio import Audio
 import font
 import hud
 from dialogue import Dialogue
-from dungeon import EFFECT_TEXT, Expedition, ROOMS, format_seed
+from dungeon import BUFFS, EFFECT_TEXT, Expedition, ROOMS, format_seed
 from menu_ui import Setup
 from motion import smooth
 from pixel_view import PixelView
@@ -27,7 +27,7 @@ ALT_MASK = 0x20000 if sys.platform == "win32" else 0x8
 PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
            ("L", "LESTE", (1, 0)), ("S", "SUL", (0, 1)))
 RESULTS_DELAY = 2.0  # Seconds the winning room stays on screen.
-ROOM_SOUNDS = {"treasure": "chest", "mimic": "trap", "trap": "trap"}   # a first visit's Buff or Debuff
+MESSAGE_TIME = 4.0   # Seconds a note stays above the cards before the scene is left clear.
 OPEN, STEP = .30, .07          # a walk: the door opens, then each zoom step into the doorway
 WALK = OPEN + 6 * STEP
 ARRIVE, TURN_FADE = .6, .25
@@ -40,8 +40,8 @@ class DungeonApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Python Trivia • A Masmorra dos Ecos")
-        self.geometry("1240x850")
-        self.minsize(1000, 760)
+        self.geometry("960x600")             # exactly 320x200 at x3: no black bars at the start
+        self.minsize(960, 600)
         self.configure(bg=BG)
         self.screen = None
         self.effects = tk.BooleanVar(value=True)
@@ -142,6 +142,8 @@ class ExpeditionScreen(tk.Frame):
     def __init__(self, app, game):
         super().__init__(app, bg="#000000")
         self.app, self.game = app, game
+        self.paused_at, self.paused_total, self.pause_choice = None, 0., 0
+        game.clock = self.now                # the Question's time and the escape time stop while paused
         self.job = None
         self.resume_at = 0
         self.particles = []          # [x, y, vx, vy, life, ink, gravity] in native pixels
@@ -149,7 +151,7 @@ class ExpeditionScreen(tk.Frame):
         self._scene = None
         self._flicker_until = self._glitch_until = 0
         self.facings = [0] * len(game.players)
-        self.last_frame = time.monotonic()
+        self.last_frame = self.now()
         self.hover = None
         self.finished = False
         self.finished_at = None
@@ -164,8 +166,7 @@ class ExpeditionScreen(tk.Frame):
         self.turn_changed_at = 0
         self.typed = ""
         self._shown_question = None
-        self.message = "A entrada está segura. Escolha sua primeira porta."
-        self.message_ink = hud.GOLD
+        self.say("A entrada está segura. Clique numa porta ou use Alt + setas.", hud.GOLD)
         self.hud = {}
         self._layers = {}
         self.regions = []
@@ -178,7 +179,7 @@ class ExpeditionScreen(tk.Frame):
         self.canvas.bind("<Motion>", self.motion)
         self.canvas.bind("<Leave>", lambda e: setattr(self, "hover", None))
         self.canvas.bind("<Button-1>", self.click)
-        self.canvas.bind("<Configure>", lambda e: self.draw_scene(time.monotonic()))
+        self.canvas.bind("<Configure>", lambda e: self.draw_scene(self.now()))
         self.renderer = PixelView(self.canvas)
         self.edges = hud.edges()
         bindings = [(f"<Alt-{key}>", lambda e, p=portal: self.navigate(p))
@@ -186,7 +187,7 @@ class ExpeditionScreen(tk.Frame):
         bindings += [(f"<Alt-{key}>", lambda e, d=turn: self.look(d)) for key, turn in (("q", -1), ("e", 1))]
         bindings += [("<Alt-r>", lambda e: self.back() or "break"), ("<Alt-m>", lambda e: self.toggle_mute() or "break")]
         bindings += [(f"<Alt-Key-{i + 1}>", lambda e, t=i: self.use_buff(t) or "break") for i in range(len(game.players))]
-        bindings += [("<Key>", self.on_key), ("<Escape>", lambda e: self.app.show_setup())]
+        bindings += [("<Key>", self.on_key), ("<Escape>", lambda e: self.toggle_pause() or "break")]
         self.nav_bindings = [(sequence, app.bind(sequence, handler)) for sequence, handler in bindings]
         self.canvas.focus_set()
         self.refresh()
@@ -200,6 +201,37 @@ class ExpeditionScreen(tk.Frame):
             self.app.unbind(sequence, binding)
         super().destroy()
 
+    def now(self):
+        """The screen's clock, shared with the Expedition: it stands still while the game is paused."""
+        return (time.monotonic() if self.paused_at is None else self.paused_at) - self.paused_total
+
+    def toggle_pause(self):
+        if self.paused_at is not None:
+            self.paused_total += time.monotonic() - self.paused_at
+            self.paused_at = None
+        elif not self.finished:
+            self.paused_at, self.pause_choice, self.hover = time.monotonic(), 0, None
+        self.refresh()
+
+    def pause_action(self, choice):
+        """Take a pause menu entry: carry on, or leave the Expedition for the menu."""
+        if hud.PAUSE_ACTIONS[choice] == "CONTINUAR":
+            self.toggle_pause()
+        else:
+            self.app.show_setup()
+
+    def pause_key(self, event):
+        """While paused the keys only move through the pause menu."""
+        key = event.keysym
+        if key in ("Return", "KP_Enter", "space"):
+            self.pause_action(self.pause_choice)
+            return "break"
+        if key in ("Up", "Down", "Tab", "Left", "Right"):
+            step = -1 if key in ("Up", "Left") else 1
+            self.pause_choice = (self.pause_choice + step) % len(hud.PAUSE_ACTIONS)
+            self.refresh()
+        return "break"
+
     @property
     def facing(self):
         """Each racer keeps their own camera between Turns."""
@@ -212,8 +244,9 @@ class ExpeditionScreen(tk.Frame):
     # ---------------------------------------------------------------- actions
 
     def busy(self):
-        """A walk, a look, an arrival or a Guardian's reaction is on screen; movement waits for it."""
-        return self.transition is not None or self.arrival_at is not None or self.reaction is not None
+        """A walk, a look, an arrival, a Guardian's reaction or the pause is on screen; movement waits for it."""
+        return (self.transition is not None or self.arrival_at is not None or self.reaction is not None
+                or self.paused_at is not None)
 
     def _speak(self, now):
         """Advance the Guardian's lines: voice the new letters, start the clock once all are shown."""
@@ -230,7 +263,7 @@ class ExpeditionScreen(tk.Frame):
         """Start walking towards a neighbouring room; its background is built meanwhile."""
         g = self.game
         index = [room.key for room in g.exits()].index(target)
-        self.transition = {"type": "move", "start": time.monotonic(), "duration": WALK, "target": target,
+        self.transition = {"type": "move", "start": self.now(), "duration": WALK, "target": target,
                            "player": g.player, "portal": self.portal_targets().index(index), "back": back}
         self.renderer.prepare(g.seed, target, sector_of(g.dungeon, g.dungeon.rooms[target]))
 
@@ -254,17 +287,17 @@ class ExpeditionScreen(tk.Frame):
         mover = self.game.player
         moved = self.game.retreat() if back else self.game.enter(exits.index(target)) if target in exits else False
         if moved:
-            sound = ROOM_SOUNDS.get(self.game.dungeon.rooms[target].kind)
-            if sound and self.game.event:
-                self.app.audio.play(sound)
+            event = self.game.event               # a chest's Buff, or a Trap, Mimic or Armed room's Debuff
+            if event and event["effect"] != "heal":
+                self.app.audio.play("chest" if event["effect"] in BUFFS else "trap")
             if self.app.effects.get():
-                self.arrival_at, self.arrival_player = time.monotonic(), mover
+                self.arrival_at, self.arrival_player = self.now(), mover
             self.resume_at = 0
             self.announce()
             self.refresh()
 
     def say(self, text, ink):
-        self.message, self.message_ink = text, ink
+        self.message, self.message_ink, self.message_at = text, ink, self.now()
 
     def announce(self):
         """Say what the last move did: a Buff, a Debuff, a Guardian or nothing."""
@@ -273,7 +306,7 @@ class ExpeditionScreen(tk.Frame):
             good = event["effect"] in ("haste", "insight", "heal", "ward", "hex", "swap")
             ink = hud.PLAYER_INK[event["player"] - 1] if good else hud.ALERT
             self.say(f"J{event['player']} · {event['text'][:1].upper()}{event['text'][1:]}", ink)
-            self.popups.append([event["text"].upper(), ink, time.monotonic()])
+            self.popups.append([event["text"].upper(), ink, self.now()])
         else:
             self.say(ROOMS[g.current.kind][1] if g.question else "Caminho livre. A vez passa adiante.", hud.MUTED)
 
@@ -289,7 +322,7 @@ class ExpeditionScreen(tk.Frame):
             return "break"
         target = (self.facing + turn) % 4
         if self.app.effects.get():
-            self.transition = {"type": "look", "start": time.monotonic(), "duration": .42,
+            self.transition = {"type": "look", "start": self.now(), "duration": .42,
                                "from": self.facing, "to": target, "turn": turn}
         else:
             self.facing = target
@@ -344,9 +377,11 @@ class ExpeditionScreen(tk.Frame):
     def on_key(self, event):
         """Typing goes into the answer while a Guardian waits; Alt chords are shortcuts."""
         g = self.game
+        if self.paused_at is not None:
+            return self.pause_key(event)
         if g.status != "playing" or g.question is None or event.state & ALT_MASK:
             return None
-        now = time.monotonic()
+        now = self.now()
         if self.dialogue and not self.dialogue.done(now):
             self.dialogue.complete()          # any key finishes the Guardian's lines at once
             self._speak(now)
@@ -378,11 +413,11 @@ class ExpeditionScreen(tk.Frame):
         author = result.get("player")
         ink = hud.PLAYER_INK[author - 1] if good and author else hud.ALERT
         if self.app.effects.get() and author:
-            self.reaction = {"player": author - 1, "kind": "hit" if good else "miss", "start": time.monotonic()}
+            self.reaction = {"player": author - 1, "kind": "hit" if good else "miss", "start": self.now()}
         self.say((f"J{author} · " if author else "") + result["message"], ink)
-        self.resume_at = time.monotonic() + (1.3 if good else 3.0)
+        self.resume_at = self.now() + (1.3 if good else 3.0)
         caption = f"J{author}  ✓" if good else EFFECT_TEXT[result["penalty"]].upper()
-        self.popups.append([caption, ink, time.monotonic()])
+        self.popups.append([caption, ink, self.now()])
         if good and self.app.effects.get():
             for _ in range(28):
                 angle = random.random() * math.tau
@@ -401,7 +436,7 @@ class ExpeditionScreen(tk.Frame):
         g = self.game
         room = g.exits()[target]
         kind = g.appearance(room)
-        hint = "Liberada" if g.has_cleared(room) else ROOMS[kind][1]
+        hint = "Armada!" if room.key in g.active.armed else "Liberada" if g.has_cleared(room) else ROOMS[kind][1]
         return f"{self.relative_portals()[portal][1]} · {ROOMS[kind][0]} · {hint}"
 
     def door_regions(self):
@@ -414,7 +449,7 @@ class ExpeditionScreen(tk.Frame):
 
     def _on_hud(self, native):
         return (any(self._hits(rect, native) for _, rect in self.regions)
-                or (self.box_rect and self._hits(self.box_rect, native)) or native[1] >= hud.CARDS_TOP)
+                or (self.box_rect and self._hits(self.box_rect, native)) or native[1] >= self.cards_top)
 
     def door_at(self, event):
         native = self.renderer.to_native(event.x, event.y)
@@ -442,20 +477,37 @@ class ExpeditionScreen(tk.Frame):
         return None
 
     def motion(self, event):
+        if self.paused_at is not None:
+            choice = self.pause_choice_at(event)
+            self.canvas.configure(cursor="" if choice is None else "hand2")
+            if choice is not None and choice != self.pause_choice:
+                self.pause_choice = choice
+                self.refresh()
+            return
         self.hover = self.door_at(event)
         native = self.renderer.to_native(event.x, event.y)
         control = native is not None and any(self._hits(rect, native) for _, rect in self.regions)
         self.canvas.configure(cursor="hand2" if control or (self.hover is not None and self.game.can_leave()
                                                              and not self.transition) else "")
 
+    def pause_choice_at(self, event):
+        native = self.renderer.to_native(event.x, event.y)
+        return next((action[1] for action, rect in self.regions
+                     if action[0] == "pause" and native and self._hits(rect, native)), None)
+
     def click(self, event):
+        if self.paused_at is not None:
+            choice = self.pause_choice_at(event)
+            if choice is not None:
+                self.pause_action(choice)
+            return
         native = self.renderer.to_native(event.x, event.y)
         if native is None:
             return
         if any(action == ("mute",) and self._hits(rect, native) for action, rect in self.regions):
             self.toggle_mute()                # even while the Guardian talks: muting must not skip its lines
             return
-        now = time.monotonic()
+        now = self.now()
         if self.dialogue and not self.dialogue.done(now):
             self.dialogue.complete()          # a click finishes the Guardian's lines, like any key
             self._speak(now)
@@ -496,20 +548,20 @@ class ExpeditionScreen(tk.Frame):
             if g.question is not None:
                 taunt, question = hud.spoken_lines(g)
                 # The Guardian starts talking once an arrival has settled, never in the dark.
-                start = time.monotonic() if self.arrival_at is None else self.arrival_at + ARRIVE
+                start = self.now() if self.arrival_at is None else self.arrival_at + ARRIVE
                 self.dialogue = Dialogue(taunt + question, start)
                 if not self.app.effects.get():
                     self.dialogue.complete()
-        self._speak(time.monotonic())
+        self._speak(self.now())
         if not playing and not self.finished:
-            self.finished_at = time.monotonic()
+            self.finished_at = self.now()
         if not playing:
             self.finished = True
             self.transition = None
             self.particles.clear()
             self.arrival_at = self.reaction = None
-        self.update_players(time.monotonic())
-        self.draw_scene(time.monotonic())
+        self.update_players(self.now())
+        self.draw_scene(self.now())
 
     def update_players(self, now):
         active = self.game.player if self.game.status == "playing" else None
@@ -530,8 +582,8 @@ class ExpeditionScreen(tk.Frame):
         self.renderer.overlay(photo, piece.x, piece.y if y is None else y)
         return piece
 
-    def _minimap(self):
-        piece, centres, self.map_corridors, self.map_rivals, self.map_kinds, self._map_cell = hud.minimap(self.game)
+    def _minimap(self, facing):
+        piece, centres, self.map_corridors, self.map_rivals, self.map_kinds, self._map_cell = hud.minimap(self.game, facing)
         self._map_centres = centres
         return piece
 
@@ -600,17 +652,23 @@ class ExpeditionScreen(tk.Frame):
         self.presented = {"viewer": viewer, "opening": opening, "zoom": zoom, "centre": centre, "fade": fade,
                           "pan": pan, "lights": lights, "guardian": scene.guardian, "aside": aside}
         view.clear_hud()
+        if self.paused_at is not None:
+            # The paused room stays behind a veil with only the pause menu over it, Question hidden.
+            pause = self._put("pause", (self.pause_choice, g.player), lambda: hud.pause_panel(g, self.pause_choice))
+            self.regions, self.box_rect, self.tab_rect = pause.regions, None, None
+            view.present(None, centre, 3)
+            self.hud = {"pause": pause.texts}
+            return
         can_retreat = playing and g.active.came_from is not None and not self.transition
         players = tuple((p.position, p.exit_hits, p.lives, p.skip_next, p.held) for p in g.players)
         self.regions = []
         for i, piece in enumerate(self.edges):
             self._put(f"edge{i}", None, lambda piece=piece: piece)
             self.regions += piece.regions if playing else []
-        badge = self._put("badge", (g.player, g.status, g.current.key, facing),
-                          lambda: hud.badge(g, facing))
+        badge = self._put("badge", (g.player, g.status, g.current.key), lambda: hud.badge(g))
         me = g.active
-        mini = self._put("map", (g.player, frozenset(me.revealed), frozenset(me.visited), players),
-                         self._minimap)
+        mini = self._put("map", (g.player, frozenset(me.revealed), frozenset(me.visited), players, facing),
+                         lambda: self._minimap(facing))
         self.map_rect = (mini.x, mini.y, mini.x + mini.pix.w - 1, mini.y + mini.pix.h - 1)
         self.map_positions = {key: view.to_canvas(*c) for key, c in self._map_centres.items()}
         self.map_radius = view.scale * max(1, self._map_cell // 2)
@@ -619,17 +677,25 @@ class ExpeditionScreen(tk.Frame):
         self.regions += mute.regions if playing else []
         cards = self._put("cards", (g.player, g.status, players, can_retreat), lambda: hud.cards(g, can_retreat))
         self.regions += cards.regions
+        self.cards_top = cards.y
+        width = hud.BOX_WIDTH                   # a Question keeps the full width for typing; a note fits its text
         if g.question is not None and playing:
             revealing = self.dialogue is not None and not self.dialogue.done(now)
             lines = hud.question_lines(g, self.typed, int(now * 2) % 2 == 0,
                                        self.dialogue.shown(now) if revealing else None)
         else:
+            width = None
             behind = self.door_label(self.hover) if self.hover is not None and playing else None
-            lines = hud.message_lines(g, behind or self.message, hud.TEXT if behind else self.message_ink, can_retreat)
-        bottom = hud.CARDS_TOP - 2
+            # Hovering a door says what is behind it; otherwise the last note fades, leaving the room clear.
+            lines = (hud.message_lines(behind, hud.TEXT) if behind
+                     else hud.message_lines(self.message, self.message_ink) if now - self.message_at < MESSAGE_TIME
+                     else [])
+        bottom = cards.y - 2
         border = hud.PLAYER_INK[g.player] if playing else hud.GOLD
-        box = self._put("box", (tuple(lines), bottom, border), lambda: hud.answer_box(lines, bottom, border))
-        self.box_rect = (box.x, box.y, box.x + box.pix.w - 1, box.y + box.pix.h - 1)
+        box = self.box_rect = None
+        if lines:
+            box = self._put("box", (tuple(lines), bottom, border, width), lambda: hud.answer_box(lines, bottom, border, width))
+            self.box_rect = (box.x, box.y, box.x + box.pix.w - 1, box.y + box.pix.h - 1)
         self.tab_rect = None
         if playing and self.portal_targets(facing)[3] is not None:
             caption = f"↓ {self.relative_portals(facing)[3][0]} · ATRÁS"
@@ -685,11 +751,14 @@ class ExpeditionScreen(tk.Frame):
             self._glitch_until = now + .15
 
     def frame(self):
-        now = time.monotonic()
+        now = self.now()
         # Let the winning moment land on screen, then hand over to the results.
         if self.finished and now - self.finished_at >= RESULTS_DELAY:
             self.job = None
             self.app.show_results(self.game)
+            return
+        if self.paused_at is not None:      # a frozen frame: no clock, no Guardian, no particles
+            self.job = self.after(100, self.frame)
             return
         dt = min(.1, now - self.last_frame)
         self.last_frame = now
@@ -721,7 +790,7 @@ class ExpeditionScreen(tk.Frame):
         self.draw_scene(now)
         # Account for drawing time instead of adding it to every frame interval.
         interval = 33 if self.app.effects.get() else 100
-        self.job = self.after(max(8, interval - int((time.monotonic() - now) * 1000)), self.frame)
+        self.job = self.after(max(8, interval - int((self.now() - now) * 1000)), self.frame)
 
 
 def main():

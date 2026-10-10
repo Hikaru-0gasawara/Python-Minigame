@@ -13,9 +13,9 @@ from props import cables
 from room_art import H, W
 
 HORIZON, FLOOR = 150, 176           # where far and near towers stand
-CORE_AT, CORE_SIZE = (218, 38), 64  # top-left of ECO's core sprite: right of the title, above the Records
+CORE_AT, CORE_SIZE = (218, 26), 64  # top-left of ECO's core sprite: the right column, above the Records
 CORE_FRAMES = 6
-CABLES_AT = ((4, 0), (52, 0), (222, 0), (272, 0))   # clear of the centred title
+CABLES_AT = ((116, 0), (164, 0), (286, 0))          # between the title and the core, and past it
 # One step darker along each colour's ramp; a ramp's darkest step falls to black.
 DARKER = [0 if i in (0, 11, 18, 22, 26) else 30 if i == 31 else i - 1 for i in range(32)]
 SEAM_ROWS = {round(3 * 1.7 ** k) for k in range(6)}

@@ -19,10 +19,12 @@ ROWS = ("difficulty", "players", "seed", "sound", "motion", "start")
 LABELS = {"difficulty": "DIFICULDADE", "players": "JOGADORES", "seed": "SEED", "sound": "SOM", "motion": "MOVIMENTO"}
 SEED_CHARS = "0123456789abcdefABCDEF-"
 SEED_LENGTH = 9                     # 3F9A-12C0
-COLUMN_AT, VALUE_X = (6, 64), 77
-TITLE_ZOOM = 4
+# Two columns: title and options on the left, ECO's core and the Records on the right.
+TITLE_AT, TITLE_ZOOM = (14, 10), 4
+COLUMN_AT, VALUE_X = (10, 64), 77
+MARGIN = 8
 FAR, NEAR = 3, 9                    # parallax: how many pixels per second each tower layer slides
-FOOTER = "↑↓ ESCOLHE · ←→ MUDA · F1 AJUDA"
+HINT = "↑↓ ←→ ENTER · F1 AJUDA"
 
 # The help dialog is a plain Tk window.
 PANEL, TEXT, GOLD, TEAL, CARD, LINE, FONT = "#0d1a21", "#edf8f8", "#efc788", "#56eee5", "#13262e", "#25414a", "Segoe UI"
@@ -32,21 +34,38 @@ PANEL, TEXT, GOLD, TEAL, CARD, LINE, FONT = "#0d1a21", "#edf8f8", "#efc788", "#5
 def art():
     """Every layer encoded once per run, as the menu comes back after each Expedition."""
     cables, sparks = menu_art.hanging_cables()
-    title = Pix(font.measure("ECOS") + 1, font.HEIGHT + 1)
-    font.draw(title, 0, 0, "ECOS", 29, shadow=0)
+    title = Pix(font.measure("ECOS") + 1, 9)
+    font.draw(title, 0, -font.TOP, "ECOS", 29, shadow=0)   # cropped to the capitals and their shadow
     return {"backdrop": menu_art.backdrop().png(), "far": menu_art.towers("far").png(),
             "near": menu_art.towers("near").png(), "cables": cables.png(), "title": title.png(),
             "cores": [menu_art.core(i).png() for i in range(menu_art.CORE_FRAMES)], "sparks": sparks}
 
 
+def veil(w, h):
+    """A menu panel: black scanlines between two rules, so the scene shows through behind the text.
+
+    Lines, not a checkerboard: Tk builds a photo's transparency one rectangle per run,
+    and a checkerboard is a run per pixel (a quarter of a second for this panel).
+    """
+    p = Pix(w, h)
+    p.px = [0 if (i // w) % 2 else None for i in range(w * h)]
+    for x in range(w):
+        p.set(x, 0, hud.EDGE)
+        p.set(x, h - 1, hud.EDGE)
+    return p
+
+
 def column(difficulty, players, seed, muted, effects, focus):
-    """The options, one row each, with the focused one lit; regions are (("row", i), rect)."""
+    """The options, one row each, with the focused one lit, then the Difficulty's numbers and the keys.
+
+    Regions are (("row", i), rect) and (("help",), rect) for the keys line.
+    """
     name, rooms, seconds, _tiers = MODES[difficulty]
-    values = {"difficulty": name.upper(), "players": "1 · SOLO" if players == 1 else str(players),
+    values = {"difficulty": name.upper(), "players": str(players),
               "seed": seed + "_" if ROWS[focus] == "seed" else seed or "ALEATÓRIA",
               "sound": "MUDO" if muted else "LIGADO", "motion": "COMPLETO" if effects else "REDUZIDO"}
     width = VALUE_X + font.measure("← AVENTUREIRO →") + 6
-    p = hud.panel(width, (len(ROWS) + 1) * font.LINE + 6)
+    p = veil(width, (len(ROWS) + 2) * font.LINE + 8)
     x0, y0 = COLUMN_AT
     piece = hud.Piece(p, x0, y0)
     for i, row in enumerate(ROWS):
@@ -64,8 +83,11 @@ def column(difficulty, players, seed, muted, effects, focus):
         piece.texts.append(text)
         piece.regions.append((("row", i), (x0 + 1, y0 + y, x0 + width - 2, y0 + y + font.LINE - 1)))
     stats = f"{seconds}s POR PERGUNTA · {rooms} SALAS"
-    font.draw(p, (width - font.measure(stats)) // 2, 4 + len(ROWS) * font.LINE, stats, hud.MUTED, shadow=0)
-    piece.texts.append(stats)
+    y = 4 + len(ROWS) * font.LINE
+    font.draw(p, (width - font.measure(stats)) // 2, y, stats, hud.MUTED, shadow=0)
+    font.draw(p, (width - font.measure(HINT)) // 2, y + font.LINE, HINT, hud.MUTED, shadow=0)
+    piece.texts += [stats, HINT]
+    piece.regions.append((("help",), (x0, y0 + y + font.LINE, x0 + width - 1, y0 + y + 2 * font.LINE - 1)))
     return piece
 
 
@@ -76,9 +98,11 @@ def records_panel(records, difficulty):
                hud.TEXT if i == 1 else hud.MUTED) for i, r in enumerate(records, 1)]
     if not records:
         lines.append(("Nenhuma fuga ainda.", hud.MUTED))
-    piece = hud.text_panel(lines, 0, 0)
-    piece.x, piece.y = W - piece.pix.w - 4, H - piece.pix.h - 4
-    return piece
+    width = max(font.measure(text) for text, _ in lines) + 12
+    p = veil(width, len(lines) * font.LINE + 5)
+    for i, (text, ink) in enumerate(lines):
+        font.draw(p, 6, 2 + i * font.LINE, text, ink, shadow=0)
+    return hud.Piece(p, W - width - MARGIN, H - p.h - MARGIN, [text for text, _ in lines])
 
 
 def caption(text, ink, y, x=None):
@@ -201,30 +225,22 @@ class Setup(tk.Frame):
     # ---------------------------------------------------------------- drawing
 
     def refresh(self):
-        """Rebuild the overlay: the title, the options, the Records and the footer."""
+        """Rebuild the panels: the subtitle, the options and the Records."""
         if self._dead:
             return
-        view = self.view
-        view.clear_hud()
-        x = (W - self.title.width() * TITLE_ZOOM) // 2
-        view.hud.tk.call(view.hud, "copy", self.title, "-zoom", TITLE_ZOOM, "-to", x, 0)
-        footer = caption(FOOTER, hud.MUTED, H - font.LINE - 5, x=COLUMN_AT[0])
-        footer.regions.append((("help",), (footer.x, footer.y, footer.x + footer.pix.w - 1, footer.y + footer.pix.h - 1)))
-        pieces = {"subtitle": caption("A MASMORRA DOS ECOS", hud.GOLD, 46),
+        pieces = {"subtitle": caption("A MASMORRA DOS ECOS", hud.GOLD, TITLE_AT[1] + 36, x=TITLE_AT[0] + 1),
                   "column": column(self.difficulty, self.players, self.seed, self.app.audio.muted,
                                    self.app.effects.get(), self.focus),
-                  "records": records_panel(self.app.records.top(self.difficulty), self.difficulty),
-                  "footer": footer}
-        self._photos = [tk.PhotoImage(master=self.canvas, data=piece.pix.png()) for piece in pieces.values()]
-        for piece, photo in zip(pieces.values(), self._photos):
-            view.overlay(photo, piece.x, piece.y)
+                  "records": records_panel(self.app.records.top(self.difficulty), self.difficulty)}
+        self._photos = [(tk.PhotoImage(master=self.canvas, data=piece.pix.png()), piece.x, piece.y)
+                        for piece in pieces.values()]
         self.pieces = pieces
         self.regions = [region for piece in pieces.values() for region in piece.regions]
         self.hud = {name: piece.texts for name, piece in pieces.items()}
         self.draw(time.monotonic())
 
     def draw(self, now):
-        """Compose the scene: backdrop, towers sliding at two speeds, the core, cables, sparks and a glitch."""
+        """Compose the scene (backdrop, towers sliding at two speeds, the core, cables, sparks, a glitch), then the panels."""
         if self._dead:
             return
         t = now - self.started if self.app.effects.get() else 0
@@ -248,6 +264,11 @@ class Setup(tk.Frame):
             for _ in range(4):
                 y, h, shift = rnd.randrange(H - 10), rnd.randrange(2, 10), rnd.choice((-7, -3, 4, 8))
                 copy(frame, "copy", other, "-from", max(0, -shift), y, W - max(0, shift), y + h, "-to", max(0, shift), y)
+        # Text and panels go into the opaque frame, not the HUD layer: Tk masks a see-through
+        # dither on a displayed image pixel by pixel, which costs whole seconds per frame.
+        copy(frame, "copy", self.title, "-zoom", TITLE_ZOOM, "-to", *TITLE_AT)
+        for photo, x, y in self._photos:
+            copy(frame, "copy", photo, "-to", x, y)
         self.canvas.delete("all")
         self.view.present()
 

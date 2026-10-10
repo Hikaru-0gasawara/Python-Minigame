@@ -569,6 +569,54 @@ class DungeonTests(unittest.TestCase):
                 break
         self.assertEqual((g.winner, g.players[1].exit_hits, g.players[0].exit_hits), (1, EXIT_HITS, 0))
 
+    def spring(self, game, debuff):
+        """Pin which Debuff an Armed room springs, leaving every other draw alone."""
+        draw = game.rng.choice
+        game.rng.choice = lambda options: debuff if options == DEBUFFS else draw(options)
+
+    def test_alone_losing_a_turn_costs_a_life_instead(self):
+        g = self.make_game()
+        g.enter(0)
+        result = self.miss(g, "medium")
+        self.assertEqual((result["penalty"], g.active.lives, g.active.skip_next), ("life", LIVES - 1, False))
+        trap = next(r for r in g.exits() if r.key not in g.active.visited)
+        trap.kind, trap.effect = "trap", "skip"
+        g.active.cleared.add(g.current.key)
+        g.enter(self.door_to(g, trap.key))
+        self.assertEqual((g.event["effect"], g.active.lives), ("life", LIVES - 2))
+
+    def test_alone_the_room_a_retreat_left_springs_a_debuff_once_on_return(self):
+        g = self.make_game()
+        room = g.exits()[0].key
+        g.enter(0)
+        self.miss(g, "hard")                            # pushed back to the Entrance
+        self.assertEqual((g.active.position, g.active.armed), (g.dungeon.entrance_key, {room}))
+        self.spring(g, "life")
+        g.enter(self.door_to(g, room))
+        self.assertEqual((g.active.lives, g.active.armed), (LIVES - 1, set()))
+        self.assertEqual(g.event["text"], "sala armada: −1 vida")
+        self.assertIsNotNone(g.question)                # its Guardian still asks
+        g.retreat()
+        g.enter(self.door_to(g, room))
+        self.assertEqual(g.active.lives, LIVES - 1)     # it springs only once
+
+    def test_an_armed_room_that_pushes_back_again_is_armed_again(self):
+        g = self.make_game()
+        room = g.exits()[0].key
+        g.enter(0)
+        self.miss(g, "hard")
+        self.spring(g, "retreat")
+        g.enter(self.door_to(g, room))
+        self.assertEqual((g.active.position, g.active.armed, g.question), (g.dungeon.entrance_key, {room}, None))
+
+    def test_with_rivals_a_retreat_arms_nothing_and_a_lost_turn_stays_a_lost_turn(self):
+        g = self.make_game(players=2)
+        g.enter(0)
+        self.miss(g, "hard")
+        self.assertEqual(g.players[0].armed, set())
+        g.enter(0)
+        self.assertEqual(self.miss(g, "medium")["penalty"], "skip")
+
     def test_elapsed_time_runs_from_the_start_and_freezes_at_the_escape(self):
         g = self.make_game()
         self.now += 42

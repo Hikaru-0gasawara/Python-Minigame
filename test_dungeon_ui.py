@@ -5,17 +5,18 @@ from pathlib import Path
 import tempfile
 import time
 import unittest
+from unittest import mock
 from types import SimpleNamespace
 
 from audio import Audio
 import font
 import hud
-from dungeon import EXIT_HITS, Expedition
+from dungeon import DEBUFFS, EXIT_HITS, Expedition
 from menu_ui import Setup
 from records import Records
 from scene import sector_of
 from test_dungeon import make_combat
-from dungeon_ui import (ALT_MASK, ARRIVE, OPEN, REACT, STEP, STEP_ASIDE, TURN_FADE, WALK, DungeonApp,
+from dungeon_ui import (ALT_MASK, ARRIVE, MESSAGE_TIME, OPEN, REACT, STEP, STEP_ASIDE, TURN_FADE, WALK, DungeonApp,
                         ExpeditionScreen, PORTALS, ResultsScreen)
 from room_art import DOOR_STEPS, GUARDIAN_ASIDE, H, W
 
@@ -127,6 +128,52 @@ class DungeonUITests(unittest.TestCase):
         self.assertGreater(screen.box_rect[1], badge_bottom)
 
     # ---------------------------------------------------------------- movement
+
+    def test_the_hud_stays_slim_and_notes_fade_to_leave_the_scene_clear(self):
+        screen = self.start_seeded(players=2)
+        self.assertEqual(len(screen.hud["badge"]), 1)
+        cards = screen._layers["cards"][1]
+        self.assertEqual((cards.pix.h, cards.y), (font.LINE + 3, H - font.LINE - 3))   # one line: nothing to do yet
+        self.assertTrue(screen.hud["box"])                                             # the opening note...
+        screen.message_at -= MESSAGE_TIME
+        screen.refresh()
+        self.assertEqual((screen.hud["box"], screen.box_rect), ([], None))             # ...fades away
+        screen.enter(0)
+        self.miss(screen)
+        screen.game.players[1].held = "ward"
+        screen.refresh()
+        self.assertEqual(screen.hud["cards"][1], ["→ J2 ♥♥♥ ↓0", "◆ ESCUDO"])         # actions on a second line
+
+    def test_escape_pauses_the_clocks_and_hides_the_question(self):
+        screen = self.start_seeded()
+        screen.enter(0)
+        g, room = screen.game, screen.game.current.key
+        left, elapsed, real = g.question_remaining, g.elapsed, time.monotonic()
+        with mock.patch("dungeon_ui.time.monotonic", return_value=real):
+            screen.toggle_pause()
+        self.assertEqual(screen.hud, {"pause": ["PAUSA", f"{g.name.upper()} · SEED 0000-002A · 0:00", "",
+                                                "CONTINUAR", "SAIR PARA O MENU"]})
+        self.type(screen, "abc")                                   # typing waits for the game
+        screen.navigate(1)
+        self.assertEqual((screen.typed, g.current.key), ("", room))
+        with mock.patch("dungeon_ui.time.monotonic", return_value=real + 60):
+            self.assertAlmostEqual(g.question_remaining, left, delta=.5)   # a minute paused costs nothing
+            self.click(screen, ("pause", 0))                          # CONTINUAR
+            self.assertIsNone(screen.paused_at)
+            self.assertAlmostEqual(g.question_remaining, left, delta=.5)
+            self.assertAlmostEqual(g.elapsed, elapsed, delta=.5)
+        self.assertIn("box", screen.hud)
+
+    def test_the_pause_menu_leaves_for_the_menu_by_keyboard(self):
+        screen = self.start_seeded()
+        screen.toggle_pause()
+        self.key(screen, keysym="Down")
+        self.assertEqual(screen.pause_choice, 1)
+        pending = screen.job
+        self.key(screen, keysym="Return")
+        self.app.update()
+        self.assertIsInstance(self.app.screen, Setup)
+        self.assertNotIn(pending, self.app.tk.call("after", "info"))
 
     def test_portals_match_compass_and_missing_doors_are_walls(self):
         screen = self.start_seeded()
@@ -266,7 +313,7 @@ class DungeonUITests(unittest.TestCase):
         self.assertEqual((screen.game.status, screen.game.winner), ("won", 0))
         self.assertIsNone(self.key(screen, "a"))
         self.assertEqual(screen.regions, [])
-        self.assertIn("escapou", screen.hud["box"][0])
+        self.assertIn("escapou", screen.hud["box"][0].lower())
 
     def test_looking_rotates_portals_without_moving_or_erasing_answer(self):
         screen = self.start_seeded()
@@ -596,7 +643,7 @@ class DungeonUITests(unittest.TestCase):
     # ---------------------------------------------------------------- players and HUD texts
 
     def active_cards(self, screen):
-        return [i for i, lines in enumerate(screen.hud["cards"]) if "SUA VEZ" in lines[0]]
+        return [i for i, lines in enumerate(screen.hud["cards"]) if lines[0].startswith("→")]
 
     def test_player_identity_tracks_full_rotation_and_result_author(self):
         screen = self.start_seeded(players=4)
@@ -605,7 +652,7 @@ class DungeonUITests(unittest.TestCase):
             screen.enter(0)
             self.assertEqual(g.player, player)
             self.assertEqual(self.active_cards(screen), [player])
-            self.assertTrue(screen.hud["badge"][0].startswith(f"J{player+1} · SUA VEZ"))
+            self.assertTrue(screen.hud["badge"][0].startswith(f"J{player+1} · "))
             self.assertTrue(screen.hud["box"][0].startswith(f"J{player+1} ·"))
             self.miss(screen)  # An easy miss: a medium one would skip this player's next Turn.
             self.assertTrue(screen.message.startswith(f"J{player+1} ·"))
@@ -627,7 +674,7 @@ class DungeonUITests(unittest.TestCase):
         self.assertFalse(any("Mímico" in text or "Armadilha" in text for text in labels))
         screen.enter(0)
         self.assertIn("J1 · −1 vida", screen.message)
-        self.assertTrue(screen.hud["badge"][1].startswith("MÍMICO"))
+        self.assertIn("MÍMICO", screen.hud["badge"][0])
 
     def test_held_buffs_show_on_cards_and_targets_are_opponents_only(self):
         screen = self.start_seeded(players=3)
@@ -656,6 +703,26 @@ class DungeonUITests(unittest.TestCase):
         self.assertEqual((g.player, g.question), (0, None))
         self.pump()
         self.assertIsNotNone(g.question)
+
+    def test_alone_a_lost_turn_shows_as_a_life_and_an_armed_room_is_marked(self):
+        screen = self.start_seeded()
+        g = screen.game
+        screen.enter(0)
+        room = g.current.key
+        g.question_tier = "medium"
+        screen.refresh()
+        self.assertIn("ERRO: −1 VIDA", screen.hud["box"][0])
+        self.miss(screen, "hard")
+        screen.refresh()
+        door = next(p for p, target in enumerate(screen.portal_targets())
+                    if target is not None and g.exits()[target].key == room)
+        self.assertTrue(screen.door_label(door).endswith("Armada!"))
+        self.sounds.clear()
+        draw = g.rng.choice                                                    # pin the sprung Debuff
+        g.rng.choice = lambda options: "life" if options == DEBUFFS else draw(options)
+        screen.enter(screen.portal_targets()[door])
+        self.assertIn("trap", self.sounds)                                     # the Armed room springs
+        self.assertIn("Sala armada: −1 vida", screen.message)
 
     def test_tier_lives_and_penalties_are_shown(self):
         screen = self.start_seeded(players=2)

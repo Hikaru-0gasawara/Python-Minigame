@@ -95,7 +95,7 @@ A held Buff that makes a chosen opponent lose their next Turn.
 A held Buff that exchanges the player's position with a chosen opponent's.
 
 **Debuff**:
-A harmful effect a player suffers during an Expedition.
+A harmful effect a player suffers during an Expedition. Playing alone, losing a Turn would cost nothing, so it costs a Life instead.
 _Avoid_: penalty, curse
 
 **Record**:
@@ -153,3 +153,7 @@ _Avoid_: explored
 **Cleared**:
 A room whose Guardian a player has answered correctly.
 _Avoid_: completed, solved, concluída (on-screen only)
+
+**Armed**:
+Playing alone, a room a Retreat pushed the player out of; entering it again springs a random Debuff, once.
+_Avoid_: cursed, trapped, armada (on-screen only)
