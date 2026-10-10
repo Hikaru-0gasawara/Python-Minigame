@@ -13,6 +13,7 @@ from dungeon import MODES, format_seed, parse_seed
 from palette import hex_color
 from pixel_view import PixelView
 from pixels import Pix
+from questions import QuestionBank
 from room_art import H, W
 
 ROWS = ("difficulty", "players", "seed", "sound", "motion", "start")
@@ -55,8 +56,10 @@ def veil(w, h):
     return p
 
 
-def column(difficulty, players, seed, muted, effects, focus):
+def column(difficulty, players, seed, muted, effects, focus, bank_broken=False):
     """The options, one row each, with the focused one lit, then the Difficulty's numbers and the keys.
+
+    A question file that failed to load takes the numbers' place, so nobody plays three spare questions unaware.
 
     Regions are (("row", i), rect) and (("help",), rect) for the keys line.
     """
@@ -82,9 +85,9 @@ def column(difficulty, players, seed, muted, effects, focus):
             text = f"{LABELS[row]} {value}"
         piece.texts.append(text)
         piece.regions.append((("row", i), (x0 + 1, y0 + y, x0 + width - 2, y0 + y + font.LINE - 1)))
-    stats = f"{seconds}s POR PERGUNTA · {rooms} SALAS"
+    stats = "BANCO DE PERGUNTAS INCOMPLETO" if bank_broken else f"{seconds}s POR PERGUNTA · {rooms} SALAS"
     y = 4 + len(ROWS) * font.LINE
-    font.draw(p, (width - font.measure(stats)) // 2, y, stats, hud.MUTED, shadow=0)
+    font.draw(p, (width - font.measure(stats)) // 2, y, stats, hud.ALERT if bank_broken else hud.MUTED, shadow=0)
     font.draw(p, (width - font.measure(HINT)) // 2, y + font.LINE, HINT, hud.MUTED, shadow=0)
     piece.texts += [stats, HINT]
     piece.regions.append((("help",), (x0, y0 + y + font.LINE, x0 + width - 1, y0 + y + 2 * font.LINE - 1)))
@@ -122,6 +125,7 @@ class Setup(tk.Frame):
         self.players = getattr(app, "menu_players", 1)
         self.seed = ""
         self.focus = 0
+        self.bank_broken = QuestionBank().fallback
         self.animation_job = None
         self._dead = False
         self._help = None
@@ -230,7 +234,7 @@ class Setup(tk.Frame):
             return
         pieces = {"subtitle": caption("A MASMORRA DOS ECOS", hud.GOLD, TITLE_AT[1] + 36, x=TITLE_AT[0] + 1),
                   "column": column(self.difficulty, self.players, self.seed, self.app.audio.muted,
-                                   self.app.effects.get(), self.focus),
+                                   self.app.effects.get(), self.focus, self.bank_broken),
                   "records": records_panel(self.app.records.top(self.difficulty), self.difficulty)}
         self._photos = [(tk.PhotoImage(master=self.canvas, data=piece.pix.png()), piece.x, piece.y)
                         for piece in pieces.values()]

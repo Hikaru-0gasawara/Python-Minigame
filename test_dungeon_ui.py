@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from audio import Audio
 import font
 import hud
+import pixel_view
 from dungeon import DEBUFFS, EXIT_HITS, Expedition
 from menu_ui import Setup
 from records import Records
@@ -481,6 +482,15 @@ class DungeonUITests(unittest.TestCase):
             screen.renderer.work()
         self.assertIn(key, screen.renderer._ready)
         self.assertNotIn(key, screen.renderer._jobs)
+
+    def test_an_unwritable_temp_folder_falls_back_to_tks_own_veils(self):
+        screen = self.start_seeded()
+        with tempfile.NamedTemporaryFile(delete=False) as blocker:   # a file where the folder should be
+            pass
+        self.addCleanup(Path(blocker.name).unlink)
+        with mock.patch("pixel_view.tempfile.gettempdir", return_value=blocker.name):
+            self.assertEqual(pixel_view._veil(2, 7), "gray50")
+            screen.renderer.present(fade=2)                          # draws instead of raising
 
     def test_reduced_motion_cuts_every_transition(self):
         screen = self.start_seeded(players=2)

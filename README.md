@@ -10,7 +10,10 @@ mas cada um por si: o primeiro a escapar pelo núcleo vence.
 Execute `python .` ou `python dungeon_ui.py` (Python 3.10+ com Tkinter, sem
 outras dependências). No Windows, dê dois cliques em `jogar.cmd`; ele usa o
 Python integrado ao Codex quando disponível, ou o comando `python` do sistema.
-O banco de perguntas atual está em inglês.
+O banco de perguntas atual está em inglês, em `easy_questions.json`,
+`medium_questions.json` e `hard_questions.json`. Se um desses arquivos não
+carregar (um erro de digitação no JSON, por exemplo), o jogo usa 3 perguntas de
+reserva e o menu avisa “BANCO DE PERGUNTAS INCOMPLETO”.
 
 ### O visual
 

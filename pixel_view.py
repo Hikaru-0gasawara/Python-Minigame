@@ -22,23 +22,26 @@ from room_art import (BACK_DOOR, GUARDIAN_ASIDE, GUARDIAN_AT, H, LIGHTS, W,
 ZOOM_STEPS = (1, 4 / 3, 5 / 3, 2, 8 / 3, 10 / 3)   # x3, x4, x5, x6, x8, x10 at the usual scale
 
 
-def _veil_file(level, scale):
-    """An XBM stipple covering level/4 of the screen in a Bayer dither, one art pixel per cell.
+def _veil(level, scale):
+    """The stipple for an XBM covering level/4 of the screen in a Bayer dither, one art pixel per cell.
 
     Tk only takes custom stipples from files, so they are written once to the temp folder.
     """
     path = Path(tempfile.gettempdir()) / "ecos-veils" / f"veil-{level}-{scale}.xbm"
-    if not path.exists():
-        size = 4 * scale
-        data = []
-        for y in range(size):
-            bits = [BAYER[y // scale % 4][x // scale % 4] < level * 4 for x in range(size)]
-            data += [sum(bit << i for i, bit in enumerate(bits[at:at + 8])) for at in range(0, size, 8)]
-        path.parent.mkdir(exist_ok=True)
-        hex_bytes = ", ".join(f"0x{b:02x}" for b in data)
-        path.write_text(f"#define v_width {size}\n#define v_height {size}\n"
-                        f"static unsigned char v_bits[] = {{ {hex_bytes} }};\n")
-    return path.as_posix()
+    try:
+        if not path.exists():
+            size = 4 * scale
+            data = []
+            for y in range(size):
+                bits = [BAYER[y // scale % 4][x // scale % 4] < level * 4 for x in range(size)]
+                data += [sum(bit << i for i, bit in enumerate(bits[at:at + 8])) for at in range(0, size, 8)]
+            path.parent.mkdir(exist_ok=True)
+            hex_bytes = ", ".join(f"0x{b:02x}" for b in data)
+            path.write_text(f"#define v_width {size}\n#define v_height {size}\n"
+                            f"static unsigned char v_bits[] = {{ {hex_bytes} }};\n")
+    except OSError:     # no writable temp folder: Tk's own stipples, finer, but never a frozen frame
+        return ("", "gray25", "gray50", "gray75", "")[level]
+    return "@" + path.as_posix()
 
 
 class PixelView:
@@ -192,7 +195,7 @@ class PixelView:
             # A stippled rectangle, not a dithered photo: Tk builds photo masks pixel by pixel,
             # so a checkerboard of transparency costs seconds; GDI draws a stipple in microseconds.
             self.canvas.create_rectangle(x, y, x + W * scale, y + H * scale, fill="#000000", outline="",
-                                         stipple="@" + _veil_file(fade, scale), offset=f"{x},{y}", tags="pixels")
+                                         stipple=_veil(fade, scale), offset=f"{x},{y}", tags="pixels")
         self.hud_display.blank()
         self.hud_display.tk.call(self.hud_display, "copy", self.hud, "-zoom", scale)
         self.canvas.create_image(x, y, image=self.hud_display, anchor="nw", tags="pixels")

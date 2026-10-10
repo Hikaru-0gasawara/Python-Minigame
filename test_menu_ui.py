@@ -4,11 +4,13 @@ from pathlib import Path
 import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 from audio import Audio
 from dungeon import CAMPAIGN, EASY, HARD
 from dungeon_ui import DungeonApp
 from menu_ui import ROWS
+from questions import FALLBACK
 from records import Records
 from room_art import H, W
 
@@ -122,6 +124,13 @@ class MenuTests(unittest.TestCase):
         self.assertTrue(menu._help.winfo_exists())
         self.key("F1")                                # a second request only raises it
         menu._help.destroy()
+
+    def test_a_question_file_that_fails_to_load_is_announced(self):
+        self.assertIn("30s POR PERGUNTA · 15 SALAS", self.app.screen.hud["column"])
+        with mock.patch("questions.load_tier", return_value=(FALLBACK, True)):
+            self.app.show_setup()
+        self.app.update()
+        self.assertIn("BANCO DE PERGUNTAS INCOMPLETO", self.app.screen.hud["column"])
 
     def test_every_piece_fits_the_frame_and_the_panels_never_overlap(self):
         for seconds in range(5):
