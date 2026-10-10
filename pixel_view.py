@@ -206,3 +206,8 @@ class PixelView:
 
     def to_canvas(self, x, y):
         return self.origin[0] + x * self.scale, self.origin[1] + y * self.scale
+
+    def centre(self, rect):
+        """Canvas coordinates of a native rectangle's centre, for clicks and tests."""
+        x0, y0, x1, y1 = rect
+        return self.to_canvas((x0 + x1 + 1) / 2, (y0 + y1 + 1) / 2)

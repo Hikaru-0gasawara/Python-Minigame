@@ -38,6 +38,16 @@ class Piece:
     regions: list = field(default_factory=list)   # (action, (x0, y0, x1, y1)) in native pixels
 
 
+def inside(rect, point):
+    """Whether a native point (None when off the frame) falls in an (x0, y0, x1, y1) rectangle, edges included."""
+    return point is not None and rect[0] <= point[0] <= rect[2] and rect[1] <= point[1] <= rect[3]
+
+
+def hit(regions, point):
+    """The action of the first (action, rect) region holding a native point, or None."""
+    return next((action for action, rect in regions if inside(rect, point)), None)
+
+
 def hearts(player):
     return "♥" * player.lives + "♡" * (LIVES - player.lives)
 

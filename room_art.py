@@ -17,7 +17,7 @@ CX, CY = 160, 95                  # vanishing point
 NEAR_X, NEAR_Y = 160, 105         # half-extents of the room at the screen edge
 BACK = .4                         # scale of the back wall
 BX0, BX1 = int(CX - NEAR_X * BACK), int(CX + NEAR_X * BACK)
-BY0, BY1 = int(CY - NEAR_Y * BACK), int(CY + NEAR_Y * BACK)
+BY1 = int(CY + NEAR_Y * BACK)
 # Native-pixel region of the back door; side doors take theirs from their sprites.
 BACK_DOOR = (136, BY1 - 72, 183, BY1 - 1)
 GUARDIAN_AT = (136, 71)           # the statue stands in front of the back door

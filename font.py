@@ -241,11 +241,3 @@ def draw(pix, x, y, text, color, shadow=None):
                 pix.set(cx + px, y + dy + py, c)
             cx += w + 1
     return measure(text)
-
-
-def draw_block(pix, x, y, text, width, color, shadow=None, line=LINE):
-    """Wrap text to `width` and draw it line by line; returns the height used."""
-    lines = wrap(text, width)
-    for i, row in enumerate(lines):
-        draw(pix, x, y + i * line, row, color, shadow)
-    return len(lines) * line

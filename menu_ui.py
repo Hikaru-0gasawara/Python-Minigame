@@ -197,16 +197,11 @@ class Setup(tk.Frame):
         return "break"
 
     def control_at(self, event):
-        native = self.view.to_native(event.x, event.y)
-        for action, (x0, y0, x1, y1) in self.regions:
-            if native and x0 <= native[0] <= x1 and y0 <= native[1] <= y1:
-                return action
-        return None
+        return hud.hit(self.regions, self.view.to_native(event.x, event.y))
 
     def region_centre(self, action):
         """Canvas coordinates of a control, for clicks and tests."""
-        x0, y0, x1, y1 = dict(self.regions)[action]
-        return self.view.to_canvas((x0 + x1 + 1) / 2, (y0 + y1 + 1) / 2)
+        return self.view.centre(dict(self.regions)[action])
 
     def motion(self, event):
         action = self.control_at(event)

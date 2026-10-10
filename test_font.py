@@ -80,12 +80,6 @@ class FontTests(unittest.TestCase):
         shade = {(i % pix.w, i // pix.w) for i, c in enumerate(pix.px) if c == 1}
         self.assertTrue(all((x + 1, y + 1) in lit | shade for x, y in lit))
 
-    def test_draw_block_wraps_and_reports_its_height(self):
-        pix = Pix(120, 60)
-        height = font.draw_block(pix, 0, 0, "uma frase longa que precisa quebrar em linhas", 100, 9)
-        self.assertEqual(height, len(font.wrap("uma frase longa que precisa quebrar em linhas", 100)) * font.LINE)
-        self.assertGreater(height, font.LINE)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,9 +24,6 @@ BG = "#080e12"
 # Alt is a different modifier bit on Windows; NumLock owns 0x8 there.
 ALT_MASK = 0x20000 if sys.platform == "win32" else 0x8
 
-# Initial portal layout; relative_portals follows the player's current facing.
-PORTALS = (("O", "OESTE", (-1, 0)), ("N", "NORTE", (0, -1)),
-           ("L", "LESTE", (1, 0)), ("S", "SUL", (0, 1)))
 RESULTS_DELAY = 2.0  # Seconds the winning room stays on screen.
 MESSAGE_TIME = 4.0   # Seconds a note stays above the cards before the scene is left clear.
 OPEN, STEP = .30, .07          # a walk: the door opens, then each zoom step into the doorway
@@ -100,16 +97,12 @@ class ResultsScreen(tk.Frame):
         self.renderer.present(fade=2)
 
     def action_at(self, event):
-        native = self.renderer.to_native(event.x, event.y)
-        for (_, i), (x0, y0, x1, y1) in self.panel.regions:
-            if native and x0 <= native[0] <= x1 and y0 <= native[1] <= y1:
-                return i
-        return None
+        action = hud.hit(self.panel.regions, self.renderer.to_native(event.x, event.y))
+        return None if action is None else action[1]
 
     def region_centre(self, i):
         """Canvas coordinates of an action, for clicks and tests."""
-        x0, y0, x1, y1 = self.panel.regions[i][1]
-        return self.renderer.to_canvas((x0 + x1 + 1) / 2, (y0 + y1 + 1) / 2)
+        return self.renderer.centre(self.panel.regions[i][1])
 
     def motion(self, event):
         i = self.action_at(event)
@@ -444,38 +437,23 @@ class ExpeditionScreen(tk.Frame):
         """Native regions of the four portals: the three drawn doors and the 'behind' tab."""
         return list(self.renderer.regions) + [self.tab_rect or (-9, -9, -9, -9)]
 
-    def _hits(self, rect, native):
-        x0, y0, x1, y1 = rect
-        return x0 <= native[0] <= x1 and y0 <= native[1] <= y1
-
     def _on_hud(self, native):
-        return (any(self._hits(rect, native) for _, rect in self.regions)
-                or (self.box_rect and self._hits(self.box_rect, native)) or native[1] >= self.cards_top)
+        return (hud.hit(self.regions, native) is not None
+                or (self.box_rect and hud.inside(self.box_rect, native)) or native[1] >= self.cards_top)
 
     def door_at(self, event):
         native = self.renderer.to_native(event.x, event.y)
         if native is None:
             return None
         for portal, rect in enumerate(self.door_regions()):
-            if self._hits(rect, native) and (portal == 3 or not self._on_hud(native)):
+            if hud.inside(rect, native) and (portal == 3 or not self._on_hud(native)):
                 return portal if self.portal_targets()[portal] is not None else None
         return None
 
-    def door_bounds(self):
-        """Each portal's clickable region as fractions of the canvas."""
-        w, h = max(self.canvas.winfo_width(), 1), max(self.canvas.winfo_height(), 1)
-        bounds = []
-        for x0, y0, x1, y1 in self.door_regions():
-            (left, top), (right, bottom) = self.renderer.to_canvas(x0, y0), self.renderer.to_canvas(x1 + 1, y1 + 1)
-            bounds.append((left / w, top / h, right / w, bottom / h))
-        return bounds
-
     def region_centre(self, action):
         """Canvas coordinates of a HUD control, for clicks and tests."""
-        for found, (x0, y0, x1, y1) in self.regions:
-            if found == action:
-                return self.renderer.to_canvas((x0 + x1 + 1) / 2, (y0 + y1 + 1) / 2)
-        return None
+        rect = dict(self.regions).get(action)
+        return None if rect is None else self.renderer.centre(rect)
 
     def motion(self, event):
         if self.paused_at is not None:
@@ -486,15 +464,13 @@ class ExpeditionScreen(tk.Frame):
                 self.refresh()
             return
         self.hover = self.door_at(event)
-        native = self.renderer.to_native(event.x, event.y)
-        control = native is not None and any(self._hits(rect, native) for _, rect in self.regions)
+        control = hud.hit(self.regions, self.renderer.to_native(event.x, event.y)) is not None
         self.canvas.configure(cursor="hand2" if control or (self.hover is not None and self.game.can_leave()
                                                              and not self.transition) else "")
 
     def pause_choice_at(self, event):
-        native = self.renderer.to_native(event.x, event.y)
-        return next((action[1] for action, rect in self.regions
-                     if action[0] == "pause" and native and self._hits(rect, native)), None)
+        action = hud.hit(self.regions, self.renderer.to_native(event.x, event.y))   # only the pause menu's while paused
+        return None if action is None else action[1]
 
     def click(self, event):
         if self.paused_at is not None:
@@ -505,7 +481,8 @@ class ExpeditionScreen(tk.Frame):
         native = self.renderer.to_native(event.x, event.y)
         if native is None:
             return
-        if any(action == ("mute",) and self._hits(rect, native) for action, rect in self.regions):
+        action = hud.hit(self.regions, native)
+        if action == ("mute",):
             self.toggle_mute()                # even while the Guardian talks: muting must not skip its lines
             return
         now = self.now()
@@ -514,16 +491,15 @@ class ExpeditionScreen(tk.Frame):
             self._speak(now)
             self.refresh()
             return
-        for action, rect in self.regions:
-            if self._hits(rect, native):
-                if action[0] == "look":
-                    self.look(action[1])
-                elif action[0] == "retreat":
-                    self.back()
-                elif action[0] == "buff":
-                    self.use_buff(action[1])
-                return
-        if self.map_positions and self._hits(self.map_rect, native):
+        if action:
+            if action[0] == "look":
+                self.look(action[1])
+            elif action[0] == "retreat":
+                self.back()
+            elif action[0] == "buff":
+                self.use_buff(action[1])
+            return
+        if self.map_positions and hud.inside(self.map_rect, native):
             self.map_click(event)
             return
         door = self.door_at(event)

@@ -15,10 +15,10 @@ import pixel_view
 from dungeon import DEBUFFS, EXIT_HITS, Expedition
 from menu_ui import Setup
 from records import Records
-from scene import sector_of
+from scene import relative_portals, sector_of
 from test_dungeon import make_combat
 from dungeon_ui import (ALT_MASK, ARRIVE, MESSAGE_TIME, OPEN, REACT, STEP, STEP_ASIDE, TURN_FADE, WALK, DungeonApp,
-                        ExpeditionScreen, PORTALS, ResultsScreen)
+                        ExpeditionScreen, ResultsScreen)
 from room_art import DOOR_STEPS, GUARDIAN_ASIDE, H, W
 
 
@@ -184,13 +184,12 @@ class DungeonUITests(unittest.TestCase):
             g.active.position = room.key
             g.active.cleared.add(room.key)
             screen.refresh()
-            for portal, (_, _, (dx, dy)) in enumerate(PORTALS):
+            for portal, (_, _, (dx, dy)) in enumerate(relative_portals(0)):
                 target = (room.x + dx, room.y + dy)
                 exists = target in g.dungeon.connections[room.key]
                 self.assertEqual(screen.door_label(portal) is not None, exists)
-                bounds = screen.door_bounds()[portal]
-                event = SimpleNamespace(x=(bounds[0]+bounds[2])/2*screen.canvas.winfo_width(),
-                                        y=(bounds[1]+bounds[3])/2*screen.canvas.winfo_height())
+                x, y = screen.renderer.centre(screen.door_regions()[portal])
+                event = SimpleNamespace(x=x, y=y)
                 self.assertEqual(screen.door_at(event), portal if exists else None)
                 if exists:
                     self.assertEqual(g.exits()[screen.portal_targets()[portal]].key, target)
