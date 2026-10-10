@@ -230,7 +230,7 @@ class Expedition:
         if player.came_from is not None:
             if len(self.players) == 1:
                 player.armed.add(player.position)
-            key, player.came_from = player.came_from, player.position
+            key, player.came_from = player.came_from, None   # so "↶ RECUAR" never leads back into it
             self._arrive(player, key)
 
     def actual(self, effect):

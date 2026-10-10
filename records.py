@@ -7,6 +7,7 @@ failed save loses the new Record but never the game.
 
 from datetime import date
 import json
+import math
 import os
 from pathlib import Path
 
@@ -27,12 +28,14 @@ class Records:
         """Every Difficulty's Records, sorted; anything malformed makes the whole file read as empty."""
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-            return {int(difficulty): sorted(({"seconds": float(r["seconds"]), "seed": int(r["seed"]),
-                                              "players": int(r["players"]), "date": str(r["date"])}
-                                             for r in records), key=lambda r: r["seconds"])[:KEEP]
-                    for difficulty, records in data.items()}
+            board = {int(difficulty): sorted(({"seconds": float(r["seconds"]), "seed": int(r["seed"]),
+                                               "players": int(r["players"]), "date": str(r["date"])}
+                                              for r in records), key=lambda r: r["seconds"])[:KEEP]
+                     for difficulty, records in data.items()}
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
             return {}
+        # Python's JSON reads NaN, Infinity and 1e999 as floats; none of them is a time.
+        return board if all(math.isfinite(r["seconds"]) for records in board.values() for r in records) else {}
 
     def top(self, difficulty):
         return self._load().get(difficulty, [])

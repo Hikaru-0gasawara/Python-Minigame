@@ -503,7 +503,7 @@ class DungeonTests(unittest.TestCase):
         g.enter(0)
         room = g.current.key
         self.assertEqual(self.miss(g, "hard")["penalty"], "retreat")
-        self.assertEqual((g.players[0].position, g.players[0].came_from), ((0, 0), room))
+        self.assertEqual((g.players[0].position, g.players[0].came_from), ((0, 0), None))   # no way "back" into it
         self.assertEqual((g.players[0].lives, g.player), (LIVES, 1))
 
     def test_losing_the_last_life_returns_to_the_entrance_with_progress_kept(self):

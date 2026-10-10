@@ -46,7 +46,9 @@ class RecordsTests(unittest.TestCase):
 
     def test_a_corrupt_file_reads_as_empty_and_is_replaced_on_the_next_record(self):
         self.path.parent.mkdir(parents=True)
-        for junk in ("{not json", "[1, 2]", '{"1": [{"seconds": "fast"}]}', '{"1": 5}'):
+        for junk in ("{not json", "[1, 2]", '{"1": [{"seconds": "fast"}]}', '{"1": 5}',
+                     '{"1": [{"seconds": NaN, "seed": 1, "players": 1, "date": "x"}]}',
+                     '{"1": [{"seconds": 1e999, "seed": 1, "players": 1, "date": "x"}]}'):
             self.path.write_text(junk, encoding="utf-8")
             self.assertEqual(self.records.top(EASY), [], junk)
         self.assertEqual(self.records.submit(EASY, 30, 1, 1), 1)

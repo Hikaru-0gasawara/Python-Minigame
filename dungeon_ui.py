@@ -1,5 +1,6 @@
 """Animated, dependency-free Tkinter dungeon crawler."""
 
+import ctypes
 from dataclasses import replace
 import math
 import random
@@ -553,6 +554,9 @@ class ExpeditionScreen(tk.Frame):
                 if not self.app.effects.get():
                     self.dialogue.complete()
         self._speak(self.now())
+        if playing:     # paint every room the next move can reach while the screen is idle
+            for room in g.exits():
+                self.renderer.prepare(g.seed, room.key, sector_of(g.dungeon, room))
         if not playing and not self.finished:
             self.finished_at = self.now()
         if not playing:
@@ -794,6 +798,10 @@ class ExpeditionScreen(tk.Frame):
 
 
 def main():
+    try:    # without this, Windows stretches the window on displays scaled above 100% and blurs every pixel
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except (AttributeError, OSError):       # not Windows, or older than Windows 8.1
+        pass
     DungeonApp().mainloop()
 
 

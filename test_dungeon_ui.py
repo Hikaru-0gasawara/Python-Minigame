@@ -460,6 +460,14 @@ class DungeonUITests(unittest.TestCase):
         screen.advance_transition(action["start"] + action["duration"] + .01)
         self.assertEqual(screen.facing, 1)
 
+    def test_every_room_the_next_move_can_reach_is_painted_ahead(self):
+        screen = self.start_seeded()
+        g, view = screen.game, screen.renderer
+        reachable = {(g.seed, room.key, sector_of(g.dungeon, room)) for room in g.exits()}
+        self.assertLessEqual(reachable, set(view._jobs) | set(view._ready))
+        view.work(budget=60)                          # idle frames finish them, so arriving never stalls
+        self.assertLessEqual(reachable, set(view._ready))
+
     def test_the_next_room_is_built_while_the_door_opens(self):
         screen = self.start_seeded()
         action = self.walk_in(screen)
