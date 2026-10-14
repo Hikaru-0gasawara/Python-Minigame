@@ -5,6 +5,7 @@ import random
 import time
 
 from dungeon_map import CARDINAL_DIRECTIONS, generate_layout
+from lang import t
 from questions import TIERS, QuestionBank, is_correct
 
 
@@ -149,7 +150,8 @@ class Expedition:
         if difficulty not in MODES or not 1 <= players <= 4:
             raise ValueError("Invalid difficulty or player count")
         self.difficulty = difficulty
-        self.name, _rooms, self.question_time, self.tier_weights = MODES[difficulty]
+        name, _rooms, self.question_time, self.tier_weights = MODES[difficulty]
+        self.name = t(name)
         self.seed = random_seed() if seed is None else seed
         self.dungeon = generate_dungeon(self.seed, difficulty)
         # Questions use their own stream so play never alters the Dungeon.
@@ -266,7 +268,7 @@ class Expedition:
     def _effect(self, player, effect):
         effect = self._apply(player, effect)
         self.event = {"player": self.players.index(player) + 1, "effect": effect,
-                      "text": EFFECT_TEXT[effect]}
+                      "text": t(EFFECT_TEXT[effect])}
 
     def _move(self, key):
         """Arrive in a Room; a Guardian not yet Cleared keeps the Turn going."""
@@ -279,7 +281,7 @@ class Expedition:
         if key in player.armed:
             player.armed.discard(key)
             self._effect(player, self.rng.choice(DEBUFFS))
-            self.event["text"] = f"sala armada: {self.event['text']}"
+            self.event["text"] = t("sala armada: ") + self.event["text"]
             if player.position != key:          # pushed out again, or back to the Entrance
                 self._end_turn()
                 return
@@ -324,7 +326,7 @@ class Expedition:
         rival = self.players[target]
         if player.held == "hex":
             rival.skip_next = True
-            text = f"maldição: J{target+1} perde a próxima vez"
+            text = t("maldição: J{n} perde a próxima vez").format(n=target + 1)
         else:
             player.position, rival.position = rival.position, player.position
             for racer in (player, rival):
@@ -332,7 +334,7 @@ class Expedition:
                 racer.came_from = None
                 racer.revealed.add(racer.position)
                 racer.revealed.update(self.dungeon.connections[racer.position])
-            text = f"trocou de lugar com J{target+1}"
+            text = t("trocou de lugar com J{n}").format(n=target + 1)
         self.ask()  # Before recording the event: asking clears the last one.
         self.event = {"player": self.player + 1, "effect": player.held, "text": text}
         player.held = None
@@ -347,7 +349,7 @@ class Expedition:
                               else self.rng.choices(TIERS, self.tier_weights)[0])
         self.question = self.bank.draw(self.question_tier, self.rng)
         kind = self.current.kind
-        self.taunt = self.rng.choice(TAUNTS[kind if kind in ("elite", "exit") else self.question_tier])
+        self.taunt = t(self.rng.choice(TAUNTS[kind if kind in ("elite", "exit") else self.question_tier]))
         self.question_duration = self.question_time
         self.question_deadline = None
 
@@ -374,21 +376,21 @@ class Expedition:
                 player.held, penalty = None, "warded"
             else:
                 penalty = self._apply(player, PENALTIES[self.question_tier])
-            reason = "Tempo da pergunta esgotado" if expired else "Resposta incorreta"
-            message = f"{reason}. Resposta: {question['answer']} · {EFFECT_TEXT[penalty]}"
+            reason = t("Tempo da pergunta esgotado" if expired else "Resposta incorreta")
+            message = f"{reason}. {t('Resposta')}: {question['answer']} · {t(EFFECT_TEXT[penalty])}"
         elif room.kind == "exit":
             player.exit_hits += 1
-            message = f"Núcleo {player.exit_hits}/{EXIT_HITS}"
+            message = f"{t('Núcleo')} {player.exit_hits}/{EXIT_HITS}"
             if player.exit_hits >= EXIT_HITS:
                 player.cleared.add(room.key)
                 self.status, self.winner, self.won_at = "won", self.player, self.clock()
-                message = "Escapou da masmorra!"
+                message = t("Escapou da masmorra!")
         else:
             player.cleared.add(room.key)
-            message = "Guardião vencido. Passagem liberada."
+            message = t("Guardião vencido. Passagem liberada.")
             if room.kind == "elite":
                 self._effect(player, room.effect)
-                message += f" Prêmio: {self.event['text']}."
+                message += f" {t('Prêmio')}: {self.event['text']}."
         result = {"correct": correct, "expired": expired, "message": message,
                   "answer": question["answer"], "player": self.player + 1,
                   "tier": self.question_tier, "penalty": penalty}

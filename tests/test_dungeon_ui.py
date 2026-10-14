@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from audio import Audio
 import font
 import hud
+import lang
 import pixel_view
 from questions import load_tier
 from dungeon import DEBUFFS, EXIT_HITS, Expedition
@@ -112,9 +113,12 @@ class DungeonUITests(unittest.TestCase):
             self.assertTrue(all(font.measure(line) <= limit for line in lines), lines)
 
     def test_every_question_in_the_bank_fits_the_box_and_long_ones_are_capped(self):
-        for tier in ("easy", "medium", "hard"):
-            for q in load_tier(tier)[0]:
-                self.assertLessEqual(len(font.wrap(q["question"], hud.BOX_WIDTH - 8)), 2, q["question"])
+        for language in lang.LANGUAGES:
+            with mock.patch.object(lang, "current", language):
+                for tier in ("easy", "medium", "hard"):
+                    for q in load_tier(tier)[0]:
+                        self.assertLessEqual(len(font.wrap(q["question"], hud.BOX_WIDTH - 8)), 2, q["question"])
+                        self.assertLessEqual(len(hud.asked_lines(q)), hud.MAX_QUESTION_LINES, q["question"])
         screen = self.start_seeded(players=4)
         screen.enter(0)
         screen.game.question = {"question": "Which discovery changed the way we understand the universe, "

@@ -92,11 +92,11 @@
     "answer": "5"
   },
   {
-    "question": "What is 3 \u00d7 3?",
+    "question": "What is 3 × 3?",
     "answer": "9"
   },
   {
-    "question": "What is 6 \u00f7 2?",
+    "question": "What is 6 ÷ 2?",
     "answer": "3"
   },
   {
@@ -598,5 +598,105 @@
   {
     "question": "What is 1 + 1?",
     "answer": "2"
+  },
+  {
+    "question": "Which of these is a fruit?",
+    "options": [
+      "carrot",
+      "apple",
+      "potato",
+      "onion"
+    ],
+    "answer": "apple"
+  },
+  {
+    "question": "Which of these animals can fly?",
+    "options": [
+      "eagle",
+      "dog",
+      "horse",
+      "shark"
+    ],
+    "answer": "eagle"
+  },
+  {
+    "question": "Which season is the coldest?",
+    "options": [
+      "summer",
+      "spring",
+      "autumn",
+      "winter"
+    ],
+    "answer": "winter"
+  },
+  {
+    "question": "How many days are in a week?",
+    "options": [
+      "5",
+      "6",
+      "7",
+      "8"
+    ],
+    "answer": "7"
+  },
+  {
+    "question": "Which shape has no corners?",
+    "options": [
+      "square",
+      "circle",
+      "triangle",
+      "rectangle"
+    ],
+    "answer": "circle"
+  },
+  {
+    "question": "Which of these is a planet?",
+    "options": [
+      "moon",
+      "sun",
+      "comet",
+      "mars"
+    ],
+    "answer": "mars"
+  },
+  {
+    "question": "What do bees make?",
+    "options": [
+      "honey",
+      "milk",
+      "silk",
+      "wool"
+    ],
+    "answer": "honey"
+  },
+  {
+    "question": "Which of these is the largest?",
+    "options": [
+      "ant",
+      "cat",
+      "whale",
+      "horse"
+    ],
+    "answer": "whale"
+  },
+  {
+    "question": "Which of these is a musical instrument?",
+    "options": [
+      "hammer",
+      "guitar",
+      "spoon",
+      "ladder"
+    ],
+    "answer": "guitar"
+  },
+  {
+    "question": "Which month comes first in the year?",
+    "options": [
+      "march",
+      "june",
+      "january",
+      "december"
+    ],
+    "answer": "january"
   }
 ]

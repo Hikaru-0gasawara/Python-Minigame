@@ -1,0 +1,646 @@
+[
+  {
+    "question": "Qual é a capital da Austrália?",
+    "answer": "camberra"
+  },
+  {
+    "question": "Que elemento tem o símbolo químico 'O'?",
+    "answer": "oxigênio"
+  },
+  {
+    "question": "Quantos continentes existem?",
+    "answer": "7"
+  },
+  {
+    "question": "Quanto é 15 x 8?",
+    "answer": "120"
+  },
+  {
+    "question": "Quem pintou a Mona Lisa?",
+    "answer": "leonardo da vinci"
+  },
+  {
+    "question": "Qual é o maior oceano da Terra?",
+    "answer": "pacífico"
+  },
+  {
+    "question": "Quantos planetas há no nosso sistema solar?",
+    "answer": "8"
+  },
+  {
+    "question": "Qual é o ponto de congelamento da água em Celsius?",
+    "answer": "0"
+  },
+  {
+    "question": "Qual é a raiz quadrada de 144?",
+    "answer": "12"
+  },
+  {
+    "question": "Que país é o lar do canguru?",
+    "answer": "austrália"
+  },
+  {
+    "question": "Quanto é 25% de 200?",
+    "answer": "50"
+  },
+  {
+    "question": "Que gás as plantas absorvem da atmosfera?",
+    "answer": "dióxido de carbono"
+  },
+  {
+    "question": "Qual é a substância natural mais dura da Terra?",
+    "answer": "diamante"
+  },
+  {
+    "question": "Quantos lados tem um hexágono?",
+    "answer": "6"
+  },
+  {
+    "question": "Qual é a capital do Canadá?",
+    "answer": "ottawa"
+  },
+  {
+    "question": "Em que ano terminou a Segunda Guerra Mundial?",
+    "answer": "1945"
+  },
+  {
+    "question": "Qual é o menor número primo?",
+    "answer": "2"
+  },
+  {
+    "question": "Que órgão do corpo humano filtra o sangue?",
+    "answer": "rim"
+  },
+  {
+    "question": "Quanto é 12 ao quadrado?",
+    "answer": "144"
+  },
+  {
+    "question": "Qual é o maior mamífero do mundo?",
+    "answer": "baleia-azul"
+  },
+  {
+    "question": "Quantos ossos tem o corpo humano adulto?",
+    "answer": "206"
+  },
+  {
+    "question": "Qual é o ponto de ebulição da água em Celsius?",
+    "answer": "100"
+  },
+  {
+    "question": "Que língua é falada no Brasil?",
+    "answer": "português"
+  },
+  {
+    "question": "Quanto é 72 ÷ 9?",
+    "answer": "8"
+  },
+  {
+    "question": "Qual é o símbolo químico do ouro?",
+    "answer": "au"
+  },
+  {
+    "question": "Quantas horas tem uma semana?",
+    "answer": "168"
+  },
+  {
+    "question": "Qual é a moeda do Japão?",
+    "answer": "iene"
+  },
+  {
+    "question": "Qual é a montanha mais alta do mundo?",
+    "answer": "monte everest"
+  },
+  {
+    "question": "Quantas cordas tem um violão comum?",
+    "answer": "6"
+  },
+  {
+    "question": "Qual é a capital da Espanha?",
+    "answer": "madri"
+  },
+  {
+    "question": "Quanto é 9 x 11?",
+    "answer": "99"
+  },
+  {
+    "question": "Que planeta é conhecido como o Planeta Vermelho?",
+    "answer": "marte"
+  },
+  {
+    "question": "Qual é o rio mais longo do mundo?",
+    "answer": "nilo"
+  },
+  {
+    "question": "Quantos graus tem um ângulo reto?",
+    "answer": "90"
+  },
+  {
+    "question": "Qual é a capital da Alemanha?",
+    "answer": "berlim"
+  },
+  {
+    "question": "Que metal é líquido à temperatura ambiente?",
+    "answer": "mercúrio"
+  },
+  {
+    "question": "Quanto é 13 x 7?",
+    "answer": "91"
+  },
+  {
+    "question": "Quantas patas tem uma aranha?",
+    "answer": "8"
+  },
+  {
+    "question": "Qual é o menor país do mundo?",
+    "answer": "vaticano"
+  },
+  {
+    "question": "Qual é a velocidade da luz no vácuo (em m/s)?",
+    "answer": "300000000"
+  },
+  {
+    "question": "Quantos anos tem um século?",
+    "answer": "100"
+  },
+  {
+    "question": "Qual é o maior órgão do corpo humano?",
+    "answer": "pele"
+  },
+  {
+    "question": "Quanto é 144 ÷ 12?",
+    "answer": "12"
+  },
+  {
+    "question": "Qual é a fórmula química do sal de cozinha?",
+    "answer": "nacl"
+  },
+  {
+    "question": "Quantos dentes tem um humano adulto?",
+    "answer": "32"
+  },
+  {
+    "question": "Qual é a capital do Egito?",
+    "answer": "cairo"
+  },
+  {
+    "question": "Quanto é 17 x 6?",
+    "answer": "102"
+  },
+  {
+    "question": "Que gás compõe a maior parte da atmosfera da Terra?",
+    "answer": "nitrogênio"
+  },
+  {
+    "question": "Quantos segundos tem uma hora?",
+    "answer": "3600"
+  },
+  {
+    "question": "Qual é o maior deserto do mundo?",
+    "answer": "antártida"
+  },
+  {
+    "question": "Qual é o cubo de 5?",
+    "answer": "125"
+  },
+  {
+    "question": "Qual é o tipo sanguíneo mais raro?",
+    "answer": "ab negativo"
+  },
+  {
+    "question": "Quantos lados tem um octógono?",
+    "answer": "8"
+  },
+  {
+    "question": "Qual é a capital da Rússia?",
+    "answer": "moscou"
+  },
+  {
+    "question": "Quanto é 18 x 9?",
+    "answer": "162"
+  },
+  {
+    "question": "Que instrumento mede terremotos?",
+    "answer": "sismógrafo"
+  },
+  {
+    "question": "Quantos milímetros tem um centímetro?",
+    "answer": "10"
+  },
+  {
+    "question": "Qual é a principal língua falada na Argentina?",
+    "answer": "espanhol"
+  },
+  {
+    "question": "Quanto é 196 ÷ 14?",
+    "answer": "14"
+  },
+  {
+    "question": "Qual é o planeta mais próximo do Sol?",
+    "answer": "mercúrio"
+  },
+  {
+    "question": "Quantas cores tem o arco-íris?",
+    "answer": "7"
+  },
+  {
+    "question": "Qual é a capital da Índia?",
+    "answer": "nova délhi"
+  },
+  {
+    "question": "Quanto é 23 x 4?",
+    "answer": "92"
+  },
+  {
+    "question": "Qual é a usina de energia da célula?",
+    "answer": "mitocôndria"
+  },
+  {
+    "question": "Quantas câmaras tem o coração humano?",
+    "answer": "4"
+  },
+  {
+    "question": "Qual é o maior planeta do nosso sistema solar?",
+    "answer": "júpiter"
+  },
+  {
+    "question": "Quanto é 11 x 13?",
+    "answer": "143"
+  },
+  {
+    "question": "Que elemento tem o número atômico 1?",
+    "answer": "hidrogênio"
+  },
+  {
+    "question": "Quantos metros tem um quilômetro?",
+    "answer": "1000"
+  },
+  {
+    "question": "Qual é a capital da China?",
+    "answer": "pequim"
+  },
+  {
+    "question": "Quanto é 169 ÷ 13?",
+    "answer": "13"
+  },
+  {
+    "question": "Que força nos mantém no chão?",
+    "answer": "gravidade"
+  },
+  {
+    "question": "Quantos zeros tem um milhão?",
+    "answer": "6"
+  },
+  {
+    "question": "Qual é o menor osso do corpo humano?",
+    "answer": "estribo"
+  },
+  {
+    "question": "Quanto é 14 x 11?",
+    "answer": "154"
+  },
+  {
+    "question": "Qual é a moeda do Reino Unido?",
+    "answer": "libra"
+  },
+  {
+    "question": "Quantos dias tem um ano bissexto?",
+    "answer": "366"
+  },
+  {
+    "question": "Qual é o mineral mais duro na escala de Mohs?",
+    "answer": "diamante"
+  },
+  {
+    "question": "Quanto é 225 ÷ 15?",
+    "answer": "15"
+  },
+  {
+    "question": "Que animal é conhecido pelas listras pretas e brancas?",
+    "answer": "zebra"
+  },
+  {
+    "question": "Quantos minutos há em 3 horas?",
+    "answer": "180"
+  },
+  {
+    "question": "Qual é a capital do Brasil?",
+    "answer": "brasília"
+  },
+  {
+    "question": "Quanto é 19 x 8?",
+    "answer": "152"
+  },
+  {
+    "question": "Que tipo de animal é o golfinho?",
+    "answer": "mamífero"
+  },
+  {
+    "question": "Quantos graus tem um círculo?",
+    "answer": "360"
+  },
+  {
+    "question": "Qual é o maior continente?",
+    "answer": "ásia"
+  },
+  {
+    "question": "Quanto é 16 x 12?",
+    "answer": "192"
+  },
+  {
+    "question": "Que processo as plantas usam para produzir alimento?",
+    "answer": "fotossíntese"
+  },
+  {
+    "question": "Quantos lados tem um pentágono?",
+    "answer": "5"
+  },
+  {
+    "question": "Qual é a capital da Coreia do Sul?",
+    "answer": "seul"
+  },
+  {
+    "question": "Quanto é 21 x 9?",
+    "answer": "189"
+  },
+  {
+    "question": "Como se chama o estudo do tempo e do clima?",
+    "answer": "meteorologia"
+  },
+  {
+    "question": "Quantos centímetros tem um metro?",
+    "answer": "100"
+  },
+  {
+    "question": "Que planeta tem anéis ao seu redor?",
+    "answer": "saturno"
+  },
+  {
+    "question": "Quanto é 256 ÷ 16?",
+    "answer": "16"
+  },
+  {
+    "question": "Qual é o principal ingrediente do pão?",
+    "answer": "farinha"
+  },
+  {
+    "question": "Quantas teclas tem um piano padrão?",
+    "answer": "88"
+  },
+  {
+    "question": "Qual é a moeda do México?",
+    "answer": "peso"
+  },
+  {
+    "question": "Quanto é 24 x 7?",
+    "answer": "168"
+  },
+  {
+    "question": "Como se chama o estudo dos seres vivos?",
+    "answer": "biologia"
+  },
+  {
+    "question": "Quantas faces tem um cubo?",
+    "answer": "6"
+  },
+  {
+    "question": "Qual é a capital da Turquia?",
+    "answer": "ancara"
+  },
+  {
+    "question": "Quanto é 289 ÷ 17?",
+    "answer": "17"
+  },
+  {
+    "question": "Que camada protege a Terra da radiação UV?",
+    "answer": "camada de ozônio"
+  },
+  {
+    "question": "Quantas patas tem um inseto?",
+    "answer": "6"
+  },
+  {
+    "question": "Qual é a maior ave do mundo?",
+    "answer": "avestruz"
+  },
+  {
+    "question": "Quanto é 27 x 6?",
+    "answer": "162"
+  },
+  {
+    "question": "Que tipo de energia o Sol fornece?",
+    "answer": "solar"
+  },
+  {
+    "question": "Quantas moedas de 25 centavos formam 1 dólar?",
+    "answer": "4"
+  },
+  {
+    "question": "Qual é a capital da Tailândia?",
+    "answer": "bangkok"
+  },
+  {
+    "question": "Quanto é 18 x 11?",
+    "answer": "198"
+  },
+  {
+    "question": "Como se chama a passagem da água para vapor?",
+    "answer": "evaporação"
+  },
+  {
+    "question": "Quantos olhos tem a maioria das aranhas?",
+    "answer": "8"
+  },
+  {
+    "question": "Qual é o menor oceano?",
+    "answer": "ártico"
+  },
+  {
+    "question": "Quanto é 22 x 8?",
+    "answer": "176"
+  },
+  {
+    "question": "Como se chama o centro de um átomo?",
+    "answer": "núcleo"
+  },
+  {
+    "question": "Quantos meses têm 31 dias?",
+    "answer": "7"
+  },
+  {
+    "question": "Qual é a capital da Grécia?",
+    "answer": "atenas"
+  },
+  {
+    "question": "Quanto é 361 ÷ 19?",
+    "answer": "19"
+  },
+  {
+    "question": "Qual é o maior animal terrestre?",
+    "answer": "elefante"
+  },
+  {
+    "question": "Quantas letras tem o alfabeto português?",
+    "answer": "26"
+  },
+  {
+    "question": "Que metal é atraído por ímãs?",
+    "answer": "ferro"
+  },
+  {
+    "question": "Quanto é 26 x 9?",
+    "answer": "234"
+  },
+  {
+    "question": "Como se chama o estudo das estrelas e dos planetas?",
+    "answer": "astronomia"
+  },
+  {
+    "question": "Quantos eixos de simetria tem um quadrado?",
+    "answer": "4"
+  },
+  {
+    "question": "Qual é a capital da Argentina?",
+    "answer": "buenos aires"
+  },
+  {
+    "question": "Quanto é 28 x 7?",
+    "answer": "196"
+  },
+  {
+    "question": "Qual é a maior espécie de urso?",
+    "answer": "urso-polar"
+  },
+  {
+    "question": "Quantos gramas tem um quilograma?",
+    "answer": "1000"
+  },
+  {
+    "question": "Qual é o animal terrestre mais rápido?",
+    "answer": "guepardo"
+  },
+  {
+    "question": "Quanto é 441 ÷ 21?",
+    "answer": "21"
+  },
+  {
+    "question": "Qual é o símbolo químico do ferro?",
+    "answer": "fe"
+  },
+  {
+    "question": "Quantos estados têm os EUA?",
+    "answer": "50"
+  },
+  {
+    "question": "Qual é a capital da Suécia?",
+    "answer": "estocolmo"
+  },
+  {
+    "question": "Quanto é 32 x 6?",
+    "answer": "192"
+  },
+  {
+    "question": "Qual é o nome da nossa galáxia?",
+    "answer": "via láctea"
+  },
+  {
+    "question": "Qual destes não é um mamífero?",
+    "options": [
+      "morcego",
+      "baleia",
+      "tubarão",
+      "golfinho"
+    ],
+    "answer": "tubarão"
+  },
+  {
+    "question": "Que gás os humanos expiram?",
+    "options": [
+      "oxigênio",
+      "dióxido de carbono",
+      "hélio",
+      "nitrogênio"
+    ],
+    "answer": "dióxido de carbono"
+  },
+  {
+    "question": "Quem escreveu 'Romeu e Julieta'?",
+    "options": [
+      "shakespeare",
+      "dickens",
+      "tolstói",
+      "homero"
+    ],
+    "answer": "shakespeare"
+  },
+  {
+    "question": "Qual é o maior país em área?",
+    "options": [
+      "china",
+      "canadá",
+      "brasil",
+      "rússia"
+    ],
+    "answer": "rússia"
+  },
+  {
+    "question": "Qual destes é um número primo?",
+    "options": [
+      "21",
+      "27",
+      "29",
+      "33"
+    ],
+    "answer": "29"
+  },
+  {
+    "question": "Qual é a capital de Portugal?",
+    "options": [
+      "porto",
+      "lisboa",
+      "madri",
+      "coimbra"
+    ],
+    "answer": "lisboa"
+  },
+  {
+    "question": "Que oceano fica entre a América e a Europa?",
+    "options": [
+      "pacífico",
+      "índico",
+      "ártico",
+      "atlântico"
+    ],
+    "answer": "atlântico"
+  },
+  {
+    "question": "Que órgão produz insulina?",
+    "options": [
+      "pâncreas",
+      "fígado",
+      "rim",
+      "coração"
+    ],
+    "answer": "pâncreas"
+  },
+  {
+    "question": "Qual destes é um gás nobre?",
+    "options": [
+      "oxigênio",
+      "nitrogênio",
+      "neônio",
+      "hidrogênio"
+    ],
+    "answer": "neônio"
+  },
+  {
+    "question": "Quantos jogadores um time de futebol põe em campo?",
+    "options": [
+      "9",
+      "10",
+      "11",
+      "12"
+    ],
+    "answer": "11"
+  }
+]

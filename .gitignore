@@ -23,3 +23,6 @@ desktop.ini
 
 # Local Claude Code settings
 .claude/settings.local.json
+
+# Generated launch videos (/brag)
+brag-output*/

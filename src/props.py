@@ -7,6 +7,7 @@ chosen by a stable hash, so a prop always looks the same.
 import math
 
 import font
+from lang import t
 from palette import CYAN, GREEN, METAL, RED, RUST, dither
 from pixels import Pix, h32, poly_inside
 from room_art import H, W, _project, eye, glitch
@@ -252,7 +253,7 @@ def eco_screen(mode):
 
 def graffiti(variant):
     """A message scrawled by someone who did not escape."""
-    word = GRAFFITI[variant % len(GRAFFITI)]
+    word = t(GRAFFITI[variant % len(GRAFFITI)])
     ink = (16, 25, 9, 21)[variant % 4]
     p = Pix(font.measure(word) + 4, font.HEIGHT + 6)
     x = 2

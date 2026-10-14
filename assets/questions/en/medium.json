@@ -542,5 +542,105 @@
   {
     "question": "What is the name of our galaxy?",
     "answer": "milky way"
+  },
+  {
+    "question": "Which of these is not a mammal?",
+    "options": [
+      "bat",
+      "whale",
+      "shark",
+      "dolphin"
+    ],
+    "answer": "shark"
+  },
+  {
+    "question": "Which gas do humans breathe out?",
+    "options": [
+      "oxygen",
+      "carbon dioxide",
+      "helium",
+      "nitrogen"
+    ],
+    "answer": "carbon dioxide"
+  },
+  {
+    "question": "Who wrote 'Romeo and Juliet'?",
+    "options": [
+      "shakespeare",
+      "dickens",
+      "tolstoy",
+      "homer"
+    ],
+    "answer": "shakespeare"
+  },
+  {
+    "question": "Which is the largest country by area?",
+    "options": [
+      "china",
+      "canada",
+      "brazil",
+      "russia"
+    ],
+    "answer": "russia"
+  },
+  {
+    "question": "Which of these is a prime number?",
+    "options": [
+      "21",
+      "27",
+      "29",
+      "33"
+    ],
+    "answer": "29"
+  },
+  {
+    "question": "What is the capital of Portugal?",
+    "options": [
+      "porto",
+      "lisbon",
+      "madrid",
+      "coimbra"
+    ],
+    "answer": "lisbon"
+  },
+  {
+    "question": "Which ocean lies between America and Europe?",
+    "options": [
+      "pacific",
+      "indian",
+      "arctic",
+      "atlantic"
+    ],
+    "answer": "atlantic"
+  },
+  {
+    "question": "Which organ produces insulin?",
+    "options": [
+      "pancreas",
+      "liver",
+      "kidney",
+      "heart"
+    ],
+    "answer": "pancreas"
+  },
+  {
+    "question": "Which of these is a noble gas?",
+    "options": [
+      "oxygen",
+      "nitrogen",
+      "neon",
+      "hydrogen"
+    ],
+    "answer": "neon"
+  },
+  {
+    "question": "How many players does a soccer team field?",
+    "options": [
+      "9",
+      "10",
+      "11",
+      "12"
+    ],
+    "answer": "11"
   }
 ]

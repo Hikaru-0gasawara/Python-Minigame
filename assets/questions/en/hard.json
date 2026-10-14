@@ -1430,5 +1430,105 @@
   {
     "question": "What is 1440 ÷ 12?",
     "answer": "120"
+  },
+  {
+    "question": "Which metal has the highest melting point?",
+    "options": [
+      "iron",
+      "tungsten",
+      "titanium",
+      "platinum"
+    ],
+    "answer": "tungsten"
+  },
+  {
+    "question": "Who formulated general relativity?",
+    "options": [
+      "newton",
+      "bohr",
+      "planck",
+      "einstein"
+    ],
+    "answer": "einstein"
+  },
+  {
+    "question": "Which is the longest river in South America?",
+    "options": [
+      "amazon",
+      "paraná",
+      "orinoco",
+      "madeira"
+    ],
+    "answer": "amazon"
+  },
+  {
+    "question": "Which philosopher wrote 'The Republic'?",
+    "options": [
+      "aristotle",
+      "socrates",
+      "plato",
+      "kant"
+    ],
+    "answer": "plato"
+  },
+  {
+    "question": "Which particle has no electric charge?",
+    "options": [
+      "proton",
+      "neutron",
+      "electron",
+      "positron"
+    ],
+    "answer": "neutron"
+  },
+  {
+    "question": "In which year did the Berlin Wall fall?",
+    "options": [
+      "1985",
+      "1987",
+      "1989",
+      "1991"
+    ],
+    "answer": "1989"
+  },
+  {
+    "question": "Which is the smallest planet in the solar system?",
+    "options": [
+      "mars",
+      "venus",
+      "earth",
+      "mercury"
+    ],
+    "answer": "mercury"
+  },
+  {
+    "question": "Which composer wrote 'The Four Seasons'?",
+    "options": [
+      "vivaldi",
+      "bach",
+      "mozart",
+      "chopin"
+    ],
+    "answer": "vivaldi"
+  },
+  {
+    "question": "What is the derivative of x squared?",
+    "options": [
+      "x",
+      "2x",
+      "x/2",
+      "2"
+    ],
+    "answer": "2x"
+  },
+  {
+    "question": "Which city hosted the first modern Olympics (1896)?",
+    "options": [
+      "paris",
+      "london",
+      "athens",
+      "rome"
+    ],
+    "answer": "athens"
   }
 ]

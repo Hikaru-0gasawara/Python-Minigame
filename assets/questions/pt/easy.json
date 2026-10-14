@@ -1,0 +1,702 @@
+[
+  {
+    "question": "Qual é a cor do céu em um dia limpo?",
+    "answer": "azul"
+  },
+  {
+    "question": "Qual é a cor da maioria das folhas?",
+    "answer": "verde"
+  },
+  {
+    "question": "Qual é a cor de uma banana madura?",
+    "answer": "amarelo"
+  },
+  {
+    "question": "Qual é a cor do carvão?",
+    "answer": "preto"
+  },
+  {
+    "question": "Qual é a cor da neve?",
+    "answer": "branco"
+  },
+  {
+    "question": "Qual é a cor da fruta laranja?",
+    "answer": "laranja"
+  },
+  {
+    "question": "Qual é a cor do morango?",
+    "answer": "vermelho"
+  },
+  {
+    "question": "Que animal late?",
+    "answer": "cachorro"
+  },
+  {
+    "question": "Que animal mia?",
+    "answer": "gato"
+  },
+  {
+    "question": "Que animal é conhecido como o rei da selva?",
+    "answer": "leão"
+  },
+  {
+    "question": "Que animal tem uma tromba comprida?",
+    "answer": "elefante"
+  },
+  {
+    "question": "Que animal salta e tem uma bolsa?",
+    "answer": "canguru"
+  },
+  {
+    "question": "Qual é o animal terrestre mais rápido?",
+    "answer": "guepardo"
+  },
+  {
+    "question": "Que animal nada e tem barbatanas?",
+    "answer": "peixe"
+  },
+  {
+    "question": "Qual é a capital da França?",
+    "answer": "paris"
+  },
+  {
+    "question": "Em que continente fica o Brasil?",
+    "answer": "américa do sul"
+  },
+  {
+    "question": "Em que planeta vivemos?",
+    "answer": "terra"
+  },
+  {
+    "question": "Qual é o maior oceano?",
+    "answer": "pacífico"
+  },
+  {
+    "question": "Qual é a capital do Japão?",
+    "answer": "tóquio"
+  },
+  {
+    "question": "Que país é conhecido pelas pirâmides?",
+    "answer": "egito"
+  },
+  {
+    "question": "Qual é a capital da Itália?",
+    "answer": "roma"
+  },
+  {
+    "question": "Quanto é 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "Quanto é 10 - 5?",
+    "answer": "5"
+  },
+  {
+    "question": "Quanto é 3 × 3?",
+    "answer": "9"
+  },
+  {
+    "question": "Quanto é 6 ÷ 2?",
+    "answer": "3"
+  },
+  {
+    "question": "Quantos lados tem um triângulo?",
+    "answer": "3"
+  },
+  {
+    "question": "Que número vem depois do 9?",
+    "answer": "10"
+  },
+  {
+    "question": "Quanto é 5 + 7?",
+    "answer": "12"
+  },
+  {
+    "question": "O que você usa para escrever?",
+    "answer": "caneta"
+  },
+  {
+    "question": "Que aparelho você usa para ligar para alguém?",
+    "answer": "telefone"
+  },
+  {
+    "question": "O que você usa para tomar sopa?",
+    "answer": "colher"
+  },
+  {
+    "question": "O que você calça nos pés?",
+    "answer": "sapatos"
+  },
+  {
+    "question": "Que objeto mostra as horas?",
+    "answer": "relógio"
+  },
+  {
+    "question": "O que você usa para cortar papel?",
+    "answer": "tesoura"
+  },
+  {
+    "question": "O que você usa para escovar os dentes?",
+    "answer": "escova de dentes"
+  },
+  {
+    "question": "De que gás os humanos precisam para respirar?",
+    "answer": "oxigênio"
+  },
+  {
+    "question": "Que estrela fica no centro do nosso sistema solar?",
+    "answer": "sol"
+  },
+  {
+    "question": "De que as plantas precisam para a fotossíntese?",
+    "answer": "luz solar"
+  },
+  {
+    "question": "Como o H2O é mais conhecido?",
+    "answer": "água"
+  },
+  {
+    "question": "Que sentido usamos para cheirar?",
+    "answer": "olfato"
+  },
+  {
+    "question": "Que sentido usa os olhos?",
+    "answer": "visão"
+  },
+  {
+    "question": "Que órgão bombeia o sangue?",
+    "answer": "coração"
+  },
+  {
+    "question": "Quanto é 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "Quanto é 17 + 17?",
+    "answer": "34"
+  },
+  {
+    "question": "Quanto é 38 + 38?",
+    "answer": "76"
+  },
+  {
+    "question": "Quanto é 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "Quanto é 48 + 48?",
+    "answer": "96"
+  },
+  {
+    "question": "Quanto é 29 + 29?",
+    "answer": "58"
+  },
+  {
+    "question": "Quanto é 14 + 14?",
+    "answer": "28"
+  },
+  {
+    "question": "Quanto é 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "Quanto é 34 + 34?",
+    "answer": "68"
+  },
+  {
+    "question": "Quanto é 21 + 21?",
+    "answer": "42"
+  },
+  {
+    "question": "Quanto é 7 + 7?",
+    "answer": "14"
+  },
+  {
+    "question": "Quanto é 39 + 39?",
+    "answer": "78"
+  },
+  {
+    "question": "Quanto é 12 + 12?",
+    "answer": "24"
+  },
+  {
+    "question": "Quanto é 29 + 29?",
+    "answer": "58"
+  },
+  {
+    "question": "Quanto é 13 + 13?",
+    "answer": "26"
+  },
+  {
+    "question": "Quanto é 15 + 15?",
+    "answer": "30"
+  },
+  {
+    "question": "Quanto é 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "Quanto é 20 + 20?",
+    "answer": "40"
+  },
+  {
+    "question": "Quanto é 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "Quanto é 5 + 5?",
+    "answer": "10"
+  },
+  {
+    "question": "Quanto é 13 + 13?",
+    "answer": "26"
+  },
+  {
+    "question": "Quanto é 21 + 21?",
+    "answer": "42"
+  },
+  {
+    "question": "Quanto é 44 + 44?",
+    "answer": "88"
+  },
+  {
+    "question": "Quanto é 7 + 7?",
+    "answer": "14"
+  },
+  {
+    "question": "Quanto é 25 + 25?",
+    "answer": "50"
+  },
+  {
+    "question": "Quanto é 34 + 34?",
+    "answer": "68"
+  },
+  {
+    "question": "Quanto é 35 + 35?",
+    "answer": "70"
+  },
+  {
+    "question": "Quanto é 29 + 29?",
+    "answer": "58"
+  },
+  {
+    "question": "Quanto é 50 + 50?",
+    "answer": "100"
+  },
+  {
+    "question": "Quanto é 15 + 15?",
+    "answer": "30"
+  },
+  {
+    "question": "Quanto é 11 + 11?",
+    "answer": "22"
+  },
+  {
+    "question": "Quanto é 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "Quanto é 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "Quanto é 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "Quanto é 43 + 43?",
+    "answer": "86"
+  },
+  {
+    "question": "Quanto é 13 + 13?",
+    "answer": "26"
+  },
+  {
+    "question": "Quanto é 42 + 42?",
+    "answer": "84"
+  },
+  {
+    "question": "Quanto é 27 + 27?",
+    "answer": "54"
+  },
+  {
+    "question": "Quanto é 25 + 25?",
+    "answer": "50"
+  },
+  {
+    "question": "Quanto é 40 + 40?",
+    "answer": "80"
+  },
+  {
+    "question": "Quanto é 16 + 16?",
+    "answer": "32"
+  },
+  {
+    "question": "Quanto é 44 + 44?",
+    "answer": "88"
+  },
+  {
+    "question": "Quanto é 17 + 17?",
+    "answer": "34"
+  },
+  {
+    "question": "Quanto é 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "Quanto é 32 + 32?",
+    "answer": "64"
+  },
+  {
+    "question": "Quanto é 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "Quanto é 24 + 24?",
+    "answer": "48"
+  },
+  {
+    "question": "Quanto é 7 + 7?",
+    "answer": "14"
+  },
+  {
+    "question": "Quanto é 31 + 31?",
+    "answer": "62"
+  },
+  {
+    "question": "Quanto é 10 + 10?",
+    "answer": "20"
+  },
+  {
+    "question": "Quanto é 49 + 49?",
+    "answer": "98"
+  },
+  {
+    "question": "Quanto é 28 + 28?",
+    "answer": "56"
+  },
+  {
+    "question": "Quanto é 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "Quanto é 36 + 36?",
+    "answer": "72"
+  },
+  {
+    "question": "Quanto é 39 + 39?",
+    "answer": "78"
+  },
+  {
+    "question": "Quanto é 21 + 21?",
+    "answer": "42"
+  },
+  {
+    "question": "Quanto é 48 + 48?",
+    "answer": "96"
+  },
+  {
+    "question": "Quanto é 28 + 28?",
+    "answer": "56"
+  },
+  {
+    "question": "Quanto é 48 + 48?",
+    "answer": "96"
+  },
+  {
+    "question": "Quanto é 33 + 33?",
+    "answer": "66"
+  },
+  {
+    "question": "Quanto é 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "Quanto é 18 + 18?",
+    "answer": "36"
+  },
+  {
+    "question": "Quanto é 26 + 26?",
+    "answer": "52"
+  },
+  {
+    "question": "Quanto é 30 + 30?",
+    "answer": "60"
+  },
+  {
+    "question": "Quanto é 8 + 8?",
+    "answer": "16"
+  },
+  {
+    "question": "Quanto é 34 + 34?",
+    "answer": "68"
+  },
+  {
+    "question": "Quanto é 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "Quanto é 27 + 27?",
+    "answer": "54"
+  },
+  {
+    "question": "Quanto é 3 + 3?",
+    "answer": "6"
+  },
+  {
+    "question": "Quanto é 45 + 45?",
+    "answer": "90"
+  },
+  {
+    "question": "Quanto é 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "Quanto é 4 + 4?",
+    "answer": "8"
+  },
+  {
+    "question": "Quanto é 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "Quanto é 8 + 8?",
+    "answer": "16"
+  },
+  {
+    "question": "Quanto é 28 + 28?",
+    "answer": "56"
+  },
+  {
+    "question": "Quanto é 40 + 40?",
+    "answer": "80"
+  },
+  {
+    "question": "Quanto é 25 + 25?",
+    "answer": "50"
+  },
+  {
+    "question": "Quanto é 36 + 36?",
+    "answer": "72"
+  },
+  {
+    "question": "Quanto é 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "Quanto é 39 + 39?",
+    "answer": "78"
+  },
+  {
+    "question": "Quanto é 45 + 45?",
+    "answer": "90"
+  },
+  {
+    "question": "Quanto é 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "Quanto é 4 + 4?",
+    "answer": "8"
+  },
+  {
+    "question": "Quanto é 17 + 17?",
+    "answer": "34"
+  },
+  {
+    "question": "Quanto é 46 + 46?",
+    "answer": "92"
+  },
+  {
+    "question": "Quanto é 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "Quanto é 15 + 15?",
+    "answer": "30"
+  },
+  {
+    "question": "Quanto é 21 + 21?",
+    "answer": "42"
+  },
+  {
+    "question": "Quanto é 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "Quanto é 41 + 41?",
+    "answer": "82"
+  },
+  {
+    "question": "Quanto é 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "Quanto é 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "Quanto é 11 + 11?",
+    "answer": "22"
+  },
+  {
+    "question": "Quanto é 30 + 30?",
+    "answer": "60"
+  },
+  {
+    "question": "Quanto é 17 + 17?",
+    "answer": "34"
+  },
+  {
+    "question": "Quanto é 42 + 42?",
+    "answer": "84"
+  },
+  {
+    "question": "Quanto é 12 + 12?",
+    "answer": "24"
+  },
+  {
+    "question": "Quanto é 37 + 37?",
+    "answer": "74"
+  },
+  {
+    "question": "Quanto é 14 + 14?",
+    "answer": "28"
+  },
+  {
+    "question": "Quanto é 6 + 6?",
+    "answer": "12"
+  },
+  {
+    "question": "Quanto é 7 + 7?",
+    "answer": "14"
+  },
+  {
+    "question": "Quanto é 5 + 5?",
+    "answer": "10"
+  },
+  {
+    "question": "Quanto é 8 + 8?",
+    "answer": "16"
+  },
+  {
+    "question": "Quanto é 48 + 48?",
+    "answer": "96"
+  },
+  {
+    "question": "Quanto é 27 + 27?",
+    "answer": "54"
+  },
+  {
+    "question": "Quanto é 2 + 2?",
+    "answer": "4"
+  },
+  {
+    "question": "Quanto é 19 + 19?",
+    "answer": "38"
+  },
+  {
+    "question": "Quanto é 1 + 1?",
+    "answer": "2"
+  },
+  {
+    "question": "Qual destes é uma fruta?",
+    "options": [
+      "cenoura",
+      "maçã",
+      "batata",
+      "cebola"
+    ],
+    "answer": "maçã"
+  },
+  {
+    "question": "Qual destes animais voa?",
+    "options": [
+      "águia",
+      "cachorro",
+      "cavalo",
+      "tubarão"
+    ],
+    "answer": "águia"
+  },
+  {
+    "question": "Qual é a estação mais fria?",
+    "options": [
+      "verão",
+      "primavera",
+      "outono",
+      "inverno"
+    ],
+    "answer": "inverno"
+  },
+  {
+    "question": "Quantos dias tem uma semana?",
+    "options": [
+      "5",
+      "6",
+      "7",
+      "8"
+    ],
+    "answer": "7"
+  },
+  {
+    "question": "Que forma não tem cantos?",
+    "options": [
+      "quadrado",
+      "círculo",
+      "triângulo",
+      "retângulo"
+    ],
+    "answer": "círculo"
+  },
+  {
+    "question": "Qual destes é um planeta?",
+    "options": [
+      "lua",
+      "sol",
+      "cometa",
+      "marte"
+    ],
+    "answer": "marte"
+  },
+  {
+    "question": "O que as abelhas produzem?",
+    "options": [
+      "mel",
+      "leite",
+      "seda",
+      "lã"
+    ],
+    "answer": "mel"
+  },
+  {
+    "question": "Qual destes é o maior?",
+    "options": [
+      "formiga",
+      "gato",
+      "baleia",
+      "cavalo"
+    ],
+    "answer": "baleia"
+  },
+  {
+    "question": "Qual destes é um instrumento musical?",
+    "options": [
+      "martelo",
+      "violão",
+      "colher",
+      "escada"
+    ],
+    "answer": "violão"
+  },
+  {
+    "question": "Qual é o primeiro mês do ano?",
+    "options": [
+      "março",
+      "junho",
+      "janeiro",
+      "dezembro"
+    ],
+    "answer": "janeiro"
+  }
+]

@@ -9,6 +9,7 @@ from unittest import mock
 from audio import Audio
 from dungeon import CAMPAIGN, EASY, HARD
 from dungeon_ui import DungeonApp
+import lang
 from menu_ui import ROWS
 from questions import FALLBACK
 from records import Records
@@ -120,6 +121,29 @@ class MenuTests(unittest.TestCase):
         self.assertFalse(self.app.effects.get())
         self.assertEqual(menu.hud["column"][4], "MOVIMENTO ← REDUZIDO →")
         self.assertIsNone(menu.animation_job)
+
+    def test_the_language_row_switches_every_text_and_the_question_bank(self):
+        self.addCleanup(setattr, lang, "current", lang.current)
+        menu = self.app.screen
+        self.go_to("language")
+        self.assertEqual(menu.hud["column"][5], "IDIOMA ← PORTUGUÊS →")
+        self.key("Right")
+        self.assertEqual(menu.hud["column"][:2] + menu.hud["column"][5:7],
+                         ["DIFFICULTY ADVENTURER", "PLAYERS 1", "LANGUAGE ← ENGLISH →", "ENTER →"])
+        self.assertEqual(menu.hud["records"], ["RECORDS · ADVENTURER", "No escapes yet."])
+        self.assertEqual(self.app.title(), "Python Trivia • The Dungeon of Echoes")
+        self.key("F1")                                # the help dialog is translated too
+        menu._help.destroy()
+        self.go_to("start")
+        self.key("Return")
+        self.app.update()
+        screen = self.app.screen
+        self.assertIn(screen.game.bank.tiers["easy"][0]["question"], "What color is the sky on a clear day?")
+        self.assertTrue(screen.hud["badge"][0].startswith("P1 · ENTRANCE"))
+        self.app.show_setup()
+        self.go_to("language")
+        self.key("Left")
+        self.assertEqual(self.app.screen.hud["column"][0], "DIFICULDADE AVENTUREIRO")
 
     def test_hover_and_clicks_work_like_the_keyboard(self):
         menu = self.app.screen

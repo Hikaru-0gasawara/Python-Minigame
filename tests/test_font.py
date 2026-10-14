@@ -4,21 +4,25 @@ import ast
 from pathlib import Path
 import unicodedata
 import unittest
+from unittest import mock
 
 import font
+import lang
 from questions import load_tier
 from pixels import Pix
 
 SRC = Path(__file__).resolve().parent.parent / "src"
-SCREEN_MODULES = ("dungeon.py", "dungeon_ui.py", "menu_ui.py", "questions.py", "scene.py")
+SCREEN_MODULES = ("dungeon.py", "dungeon_ui.py", "lang.py", "menu_ui.py", "questions.py", "scene.py")
 
 
 def used_characters():
     """Every character of the question bank and of every string literal the screens use."""
     chars = set()
-    for tier in ("easy", "medium", "hard"):
-        for q in load_tier(tier)[0]:
-            chars |= set(q["question"]) | set(q["answer"])
+    for language in lang.LANGUAGES:
+        with mock.patch.object(lang, "current", language):
+            for tier in ("easy", "medium", "hard"):
+                for q in load_tier(tier)[0]:
+                    chars |= set(q["question"]) | set(q["answer"]) | set("".join(q.get("options", ())))
     for name in SCREEN_MODULES:
         for node in ast.walk(ast.parse((SRC / name).read_text(encoding="utf-8"))):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):

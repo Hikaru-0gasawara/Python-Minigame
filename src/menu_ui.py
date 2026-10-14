@@ -8,16 +8,19 @@ import tkinter as tk
 
 import font
 import hud
+import lang
 import menu_art
 from dungeon import MODES, format_seed, parse_seed
+from lang import t
 from palette import hex_color
 from pixel_view import PixelView
 from pixels import Pix
 from questions import QuestionBank
 from room_art import H, W
 
-ROWS = ("difficulty", "players", "seed", "sound", "motion", "start")
-LABELS = {"difficulty": "DIFICULDADE", "players": "JOGADORES", "seed": "SEED", "sound": "SOM", "motion": "MOVIMENTO"}
+ROWS = ("difficulty", "players", "seed", "sound", "motion", "language", "start")
+LABELS = {"difficulty": "DIFICULDADE", "players": "JOGADORES", "seed": "SEED", "sound": "SOM", "motion": "MOVIMENTO",
+          "language": "IDIOMA"}
 SEED_CHARS = "0123456789abcdefABCDEF-"
 SEED_LENGTH = 9                     # 3F9A-12C0
 # Two columns: title and options on the left, ECO's core and the Records on the right.
@@ -64,9 +67,10 @@ def column(difficulty, players, seed, muted, effects, focus, bank_broken=False):
     Regions are (("row", i), rect) and (("help",), rect) for the keys line.
     """
     name, rooms, seconds, _tiers = MODES[difficulty]
-    values = {"difficulty": name.upper(), "players": str(players),
-              "seed": seed + "_" if ROWS[focus] == "seed" else seed or "ALEATÓRIA",
-              "sound": "MUDO" if muted else "LIGADO", "motion": "COMPLETO" if effects else "REDUZIDO"}
+    values = {"difficulty": t(name).upper(), "players": str(players),
+              "seed": seed + "_" if ROWS[focus] == "seed" else seed or t("ALEATÓRIA"),
+              "sound": t("MUDO" if muted else "LIGADO"), "motion": t("COMPLETO" if effects else "REDUZIDO"),
+              "language": lang.LANGUAGES[lang.current]}
     width = VALUE_X + font.measure("← AVENTUREIRO →") + 6
     p = veil(width, (len(ROWS) + 2) * font.LINE + 8)
     x0, y0 = COLUMN_AT
@@ -76,31 +80,34 @@ def column(difficulty, players, seed, muted, effects, focus, bank_broken=False):
         if lit:
             p.rect(1, y, width - 2, y + font.LINE - 1, hud.EDGE)
         if row == "start":
-            text = "ENTRAR →"
+            text = t("ENTRAR →")
             font.draw(p, (width - font.measure(text)) // 2, y, text, hud.GOLD if lit else hud.TEXT, shadow=0)
         else:
             value = f"← {values[row]} →" if lit and row != "seed" else values[row]
-            font.draw(p, 6, y, LABELS[row], hud.TEXT if lit else hud.MUTED, shadow=0)
+            label = t(LABELS[row])
+            font.draw(p, 6, y, label, hud.TEXT if lit else hud.MUTED, shadow=0)
             font.draw(p, VALUE_X, y, value, hud.GOLD if lit else hud.TEXT, shadow=0)
-            text = f"{LABELS[row]} {value}"
+            text = f"{label} {value}"
         piece.texts.append(text)
         piece.regions.append((("row", i), (x0 + 1, y0 + y, x0 + width - 2, y0 + y + font.LINE - 1)))
-    stats = "BANCO DE PERGUNTAS INCOMPLETO" if bank_broken else f"{seconds}s POR PERGUNTA · {rooms} SALAS"
+    stats = (t("BANCO DE PERGUNTAS INCOMPLETO") if bank_broken
+             else f"{seconds}s {t('POR PERGUNTA')} · {rooms} {t('SALAS')}")
+    hint = t(HINT)
     y = 4 + len(ROWS) * font.LINE
     font.draw(p, (width - font.measure(stats)) // 2, y, stats, hud.ALERT if bank_broken else hud.MUTED, shadow=0)
-    font.draw(p, (width - font.measure(HINT)) // 2, y + font.LINE, HINT, hud.MUTED, shadow=0)
-    piece.texts += [stats, HINT]
+    font.draw(p, (width - font.measure(hint)) // 2, y + font.LINE, hint, hud.MUTED, shadow=0)
+    piece.texts += [stats, hint]
     piece.regions.append((("help",), (x0, y0 + y + font.LINE, x0 + width - 1, y0 + y + 2 * font.LINE - 1)))
     return piece
 
 
 def records_panel(records, difficulty):
     """Bottom-right: the five best escapes of the selected Difficulty."""
-    lines = [(f"RECORDES · {MODES[difficulty][0].upper()}", hud.GOLD)]
-    lines += [(f"{i}. {hud.duration(r['seconds'])}  {r['players']}J  {format_seed(r['seed'])}",
+    lines = [(f"{t('RECORDES')} · {t(MODES[difficulty][0]).upper()}", hud.GOLD)]
+    lines += [(f"{i}. {hud.duration(r['seconds'])}  {r['players']}{t('J')}  {format_seed(r['seed'])}",
                hud.TEXT if i == 1 else hud.MUTED) for i, r in enumerate(records, 1)]
     if not records:
-        lines.append(("Nenhuma fuga ainda.", hud.MUTED))
+        lines.append((t("Nenhuma fuga ainda."), hud.MUTED))
     width = max(font.measure(text) for text, _ in lines) + 12
     p = veil(width, len(lines) * font.LINE + 5)
     for i, (text, ink) in enumerate(lines):
@@ -161,6 +168,11 @@ class Setup(tk.Frame):
             self.players = (self.players - 1 + step) % 4 + 1
         elif row == "sound":
             self.app.audio.toggle_mute()
+        elif row == "language":
+            codes = list(lang.LANGUAGES)
+            lang.current = codes[(codes.index(lang.current) + step) % len(codes)]
+            self.bank_broken = QuestionBank().fallback      # each language has its own question files
+            self.app.retitle()
         elif row == "motion":
             self.app.effects.set(not self.app.effects.get())    # its trace redraws the menu
             return
@@ -230,7 +242,7 @@ class Setup(tk.Frame):
             return
         if self.difficulty not in self.tops:
             self.tops[self.difficulty] = self.app.records.top(self.difficulty)
-        pieces = {"subtitle": caption("A MASMORRA DOS ECOS", hud.GOLD, TITLE_AT[1] + 36, x=TITLE_AT[0] + 1),
+        pieces = {"subtitle": caption(t("A MASMORRA DOS ECOS"), hud.GOLD, TITLE_AT[1] + 36, x=TITLE_AT[0] + 1),
                   "column": column(self.difficulty, self.players, self.seed, self.app.audio.muted,
                                    self.app.effects.get(), self.focus, self.bank_broken),
                   "records": records_panel(self.tops[self.difficulty], self.difficulty)}
@@ -316,22 +328,22 @@ class Setup(tk.Frame):
             self._help.lift()
             return
         dialog = self._help = tk.Toplevel(self)
-        dialog.title("Como jogar · ECOS")
+        dialog.title(t("Como jogar · ECOS"))
         dialog.configure(bg=PANEL, padx=26, pady=24)
         dialog.transient(self.app)
         dialog.resizable(False, False)
 
         def label(text, size, color, **kwargs):
             return tk.Label(dialog, text=text, bg=PANEL, fg=color, font=(FONT, size), **kwargs)
-        label("CADA RESPOSTA ABRE UM CAMINHO", 16, TEAL).pack(anchor="w", pady=(0, 18))
+        label(t("CADA RESPOSTA ABRE UM CAMINHO"), 16, TEAL).pack(anchor="w", pady=(0, 18))
         for title, detail in (
             ("01  EXPLORE", "Um movimento por turno; seu mapa mostra só o que você descobriu.\nAlt + setas: mover. Alt + Q/E: olhar para os lados."),
             ("02  RESPONDA", "Cada guardião pergunta a todo jogador que entra. Você tem 3 vidas.\nErrar fácil: −1 vida · média: perde a vez · difícil: recua."),
             ("03  ESCAPE PRIMEIRO", "Acerte 3 perguntas do núcleo, uma por turno.\nO primeiro jogador a escapar vence a corrida."),
         ):
-            label(title, 10, GOLD).pack(anchor="w")
-            label(detail, 11, TEXT, justify="left").pack(anchor="w", pady=(5, 17))
-        close = tk.Button(dialog, text="ENTENDI   →", command=dialog.destroy, bg=CARD, fg=TEXT,
+            label(t(title), 10, GOLD).pack(anchor="w")
+            label(t(detail), 11, TEXT, justify="left").pack(anchor="w", pady=(5, 17))
+        close = tk.Button(dialog, text=t("ENTENDI   →"), command=dialog.destroy, bg=CARD, fg=TEXT,
                           activebackground="#23434b", activeforeground=TEXT, relief="flat", bd=0,
                           highlightthickness=1, highlightbackground=LINE, highlightcolor=TEAL,
                           cursor="hand2", font=(FONT, 10, "bold"), padx=12, pady=8)

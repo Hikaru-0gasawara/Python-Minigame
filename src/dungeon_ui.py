@@ -13,6 +13,7 @@ import font
 import hud
 from dialogue import Dialogue
 from dungeon import BUFFS, EFFECT_TEXT, Expedition, ROOMS, format_seed
+from lang import t
 from menu_ui import Setup
 from motion import smooth
 from pixel_view import PixelView
@@ -37,7 +38,7 @@ ARRIVAL_LIGHTS = ((.25, "off"), (.32, "on"), (.40, "off"), (.50, "dimmed"), (mat
 class DungeonApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Python Trivia • A Masmorra dos Ecos")
+        self.retitle()
         self.geometry("960x600")             # exactly 320x200 at x3: no black bars at the start
         self.minsize(960, 600)
         self.configure(bg=BG)
@@ -46,6 +47,9 @@ class DungeonApp(tk.Tk):
         self.audio = Audio()
         self.records = Records()
         self.show_setup()
+
+    def retitle(self):
+        self.title(t("Python Trivia • A Masmorra dos Ecos"))
 
     def swap(self, screen):
         if self.screen:
@@ -160,7 +164,7 @@ class ExpeditionScreen(tk.Frame):
         self.turn_changed_at = 0
         self.typed = ""
         self._shown_question = None
-        self.say("A entrada está segura. Clique numa porta ou use Alt + setas.", hud.GOLD)
+        self.say(t("A entrada está segura. Clique numa porta ou use Alt + setas."), hud.GOLD)
         self.hud = {}
         self._layers = {}
         self.regions = []
@@ -271,7 +275,7 @@ class ExpeditionScreen(tk.Frame):
         self.app.audio.play("door")
         if self.app.effects.get():
             self._walk(exits[door].key, back=False)
-            self.say("Abrindo passagem…", hud.PLAYER_INK[g.player])
+            self.say(t("Abrindo passagem…"), hud.PLAYER_INK[g.player])
             self.refresh()
         else:
             self._arrive(exits[door].key)
@@ -299,10 +303,10 @@ class ExpeditionScreen(tk.Frame):
         if event:
             good = event["effect"] in ("haste", "insight", "heal", "ward", "hex", "swap")
             ink = hud.PLAYER_INK[event["player"] - 1] if good else hud.ALERT
-            self.say(f"J{event['player']} · {event['text'][:1].upper()}{event['text'][1:]}", ink)
+            self.say(f"{t('J')}{event['player']} · {event['text'][:1].upper()}{event['text'][1:]}", ink)
             self.popups.append([event["text"].upper(), ink, self.now()])
         else:
-            self.say(ROOMS[g.current.kind][1] if g.question else "Caminho livre. A vez passa adiante.", hud.MUTED)
+            self.say(t(ROOMS[g.current.kind][1] if g.question else "Caminho livre. A vez passa adiante."), hud.MUTED)
 
     def relative_portals(self, facing=None):
         return relative_portals(self.facing if facing is None else facing)
@@ -408,9 +412,9 @@ class ExpeditionScreen(tk.Frame):
         ink = hud.PLAYER_INK[author - 1] if good and author else hud.ALERT
         if self.app.effects.get() and author:
             self.reaction = {"player": author - 1, "kind": "hit" if good else "miss", "start": self.now()}
-        self.say((f"J{author} · " if author else "") + result["message"], ink)
+        self.say((f"{t('J')}{author} · " if author else "") + result["message"], ink)
         self.resume_at = self.now() + (1.3 if good else 3.0)
-        caption = f"J{author}  ✓" if good else EFFECT_TEXT[result["penalty"]].upper()
+        caption = f"{t('J')}{author}  ✓" if good else t(EFFECT_TEXT[result["penalty"]]).upper()
         self.popups.append([caption, ink, self.now()])
         if good and self.app.effects.get():
             for _ in range(28):
@@ -431,7 +435,8 @@ class ExpeditionScreen(tk.Frame):
         room = g.exits()[target]
         kind = g.appearance(room)
         hint = "Armada!" if room.key in g.active.armed else "Liberada" if g.has_cleared(room) else ROOMS[kind][1]
-        return f"{self.relative_portals()[portal][1]} · {ROOMS[kind][0]} · {hint}"
+        compass = self.relative_portals()[portal][1]
+        return f"{t(compass)} · {t(ROOMS[kind][0])} · {t(hint)}"
 
     def door_regions(self):
         """Native regions of the four portals: the three drawn doors and the 'behind' tab."""
@@ -678,7 +683,7 @@ class ExpeditionScreen(tk.Frame):
             self.box_rect = (box.x, box.y, box.x + box.pix.w - 1, box.y + box.pix.h - 1)
         self.tab_rect = None
         if playing and self.portal_targets(facing)[3] is not None:
-            caption = f"↓ {self.relative_portals(facing)[3][0]} · ATRÁS"
+            caption = f"↓ {t(self.relative_portals(facing)[3][0])} · {t('ATRÁS')}"
             tab = self._put("tab", (caption, self.hover == 3), lambda: hud.behind_tab(caption, self.hover == 3))
             self.tab_rect = (tab.x, tab.y, tab.x + tab.pix.w - 1, tab.y + tab.pix.h - 1)
         if g.question is not None and playing and g.question_duration:
@@ -692,7 +697,7 @@ class ExpeditionScreen(tk.Frame):
                 view.fill(ink, *rect)
         if len(g.players) > 1 and playing and effects and 0 < now - self.turn_changed_at < 1.25:
             lift = int(6 * (1 - smooth((now - self.turn_changed_at) / .25)))
-            text = f"JOGADOR {g.player + 1} · SUA VEZ"
+            text = t("JOGADOR {n} · SUA VEZ").format(n=g.player + 1)
             self._put("turn", text, lambda: hud.banner([(text, hud.PLAYER_INK[g.player])], 0, hud.PLAYER_INK[g.player]),
                       y=50 - lift)
         if effects:
@@ -703,8 +708,9 @@ class ExpeditionScreen(tk.Frame):
                 view.fill(ink, int(x), int(y), int(x), int(y))
         if self.finished:
             winner = g.players[g.winner]
-            ending = [("MASMORRA CONQUISTADA", hud.GOLD), (f"JOGADOR {g.winner + 1} ESCAPOU", hud.PLAYER_INK[g.winner]),
-                      (f"SEED {format_seed(g.seed)} · {len(winner.visited)} SALAS", hud.MUTED)]
+            ending = [(t("MASMORRA CONQUISTADA"), hud.GOLD),
+                      (t("JOGADOR {n} ESCAPOU").format(n=g.winner + 1), hud.PLAYER_INK[g.winner]),
+                      (f"SEED {format_seed(g.seed)} · {len(winner.visited)} {t('SALAS')}", hud.MUTED)]
             self._put("finished", tuple(ending), lambda: hud.banner(ending, 60, hud.GOLD))
         view.present(zoom, centre, fade, pan)
         self.hud = {"badge": badge.texts, "map": mini.texts, "cards": cards.texts, "box": [t for t, _ in lines],

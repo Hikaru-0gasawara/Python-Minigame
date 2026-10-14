@@ -10,8 +10,12 @@ mas cada um por si: o primeiro a escapar pelo núcleo vence.
 Na pasta do projeto, execute `python src` (Python 3.10+ com Tkinter, sem
 outras dependências). No Windows, dê dois cliques em `jogar.cmd`; ele usa o
 Python integrado ao Codex quando disponível, ou o comando `python` do sistema.
-O banco de perguntas atual está em inglês, em `assets/questions/` (`easy.json`,
-`medium.json` e `hard.json`). Se um desses arquivos não
+O jogo inteiro roda em português ou inglês: escolha em IDIOMA, no menu. Cada
+idioma tem seu banco de perguntas em `assets/questions/pt/` e
+`assets/questions/en/` (`easy.json`, `medium.json` e `hard.json`), com as mesmas
+perguntas na mesma ordem, para que uma seed pergunte as mesmas coisas nos dois.
+Uma pergunta com `"options"` é de múltipla escolha: vale digitar a letra ou a
+resposta. Acentos, maiúsculas e hífens não contam. Se um desses arquivos não
 carregar (um erro de digitação no JSON, por exemplo), o jogo usa 3 perguntas de
 reserva e o menu avisa “BANCO DE PERGUNTAS INCOMPLETO”.
 
