@@ -1,20 +1,32 @@
-"""Short sounds synthesised at startup and played through Windows' standard sound module.
+"""Short sounds synthesised at startup and played through the system's own sound.
 
-The sounds are written once to a cache folder, since Windows only plays from
-memory synchronously. A new sound cuts the one playing. Without Windows sound
-support every call is a silent no-op.
+The sounds are written once to a cache folder. On Windows the standard sound
+module plays the files, since it only plays from memory synchronously. On Linux
+the first command-line player installed (PipeWire's, PulseAudio's, then ALSA's)
+receives one endless stream of samples. Either way a new sound cuts the one
+playing, and without any of them every call is a silent no-op.
 """
 
+import array
+import functools
 import io
 from pathlib import Path
 import random
+import shutil
+import subprocess
+import sys
 import tempfile
+import threading
 import wave
 
 try:
     import winsound
 except ImportError:          # not Windows
     winsound = None
+try:
+    import fcntl
+except ImportError:          # Windows
+    fcntl = None
 
 RATE = 22050
 _rng = random.Random(7)
@@ -87,10 +99,98 @@ def windows_player():
     return play
 
 
+# Linux's stream: 16-bit stereo at the system's usual rate, written a chunk (about 5 ms) at a time.
+OUT_RATE, CHUNK = 48000, 1024
+PIPE_SIZE = 4096             # one page: about 21 ms of sound queued behind the player, never seconds
+LINUX_PLAYERS = (            # in order of preference, each reading raw samples from its input
+    ("pw-cat", "--playback", "--raw", "--format=s16", f"--rate={OUT_RATE}", "--channels=2",
+     "--latency=20ms", "--media-role=Game", "-"),
+    ("pacat", "--playback", "--raw", "--format=s16le", f"--rate={OUT_RATE}", "--channels=2",
+     "--latency-msec=20", "--client-name=ECOS"),
+    ("aplay", "-q", "-t", "raw", "-f", "S16_LE", "-r", str(OUT_RATE), "-c", "2", "--buffer-time=20000", "-"),
+)
+
+
+@functools.lru_cache(maxsize=None)
+def stream_samples(path):
+    """A cached sound as Linux's stream plays it: each 8-bit sample becomes 16-bit, on both channels."""
+    with wave.open(path) as w:
+        frames = w.readframes(w.getnframes())
+    out = array.array("h")
+    for i in range(len(frames) * OUT_RATE // RATE):
+        v = (frames[i * RATE // OUT_RATE] - 128) * 256
+        out.extend((v, v))
+    if sys.byteorder == "big":
+        out.byteswap()
+    return out.tobytes()
+
+
+class Stream:
+    """What the Linux player gets next: the current sound, then silence. A new sound cuts the old one."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.sound, self.at = b"", 0
+
+    def play(self, sound):
+        with self.lock:
+            self.sound, self.at = sound, 0
+
+    def chunk(self, size=CHUNK):
+        with self.lock:
+            part = self.sound[self.at:self.at + size]
+            self.at += len(part)
+        return part + bytes(size - len(part))
+
+
+class StreamPlayer:
+    """Play a file by streaming it to a system player; None stops it.
+
+    The player starts with the first sound and lives as long as the game, fed
+    silence in between. Its input pipe is shrunk to one page, so a sound waits
+    behind milliseconds of audio, not seconds. If the player quits (no sound
+    server, say), the game goes on in silence.
+    """
+
+    def __init__(self, command):
+        self.command, self.stream, self.process = command, Stream(), None
+
+    def __call__(self, path):
+        if self.process is None:
+            self.process = self.start()
+        self.stream.play(stream_samples(path) if path else b"")
+
+    def start(self):
+        try:
+            process = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL, bufsize=0)
+        except OSError:
+            return False
+        try:
+            fcntl.fcntl(process.stdin, fcntl.F_SETPIPE_SZ, PIPE_SIZE)
+        except (AttributeError, OSError):     # not Linux: a longer pipe, a later sound
+            pass
+        threading.Thread(target=self.feed, args=(process.stdin,), daemon=True).start()
+        return process
+
+    def feed(self, pipe):
+        try:
+            while True:
+                pipe.write(self.stream.chunk())
+        except (OSError, ValueError):         # the player quit
+            pass
+
+
+def linux_player(which=shutil.which):
+    """A StreamPlayer for the first Linux player installed, or None."""
+    command = next((c for c in LINUX_PLAYERS if which(c[0])), None)
+    return command and StreamPlayer(command)
+
+
 class Audio:
     def __init__(self, player=None, folder=None):
-        """`player(path)` plays a file and `player(None)` stops; by default Windows' own, if any."""
-        self.player = player or windows_player()
+        """`player(path)` plays a file and `player(None)` stops; by default the system's own, if any."""
+        self.player = player or windows_player() or linux_player()
         self.muted = False
         self.files = {}
         if self.player:

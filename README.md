@@ -7,9 +7,24 @@ abriga ECO, uma IA que transforma cada passagem numa prova. A cada expedição n
 uma masmorra nova. De 1 a 4 jogadores dividem a mesma tela e a mesma masmorra,
 mas cada um por si: o primeiro a escapar pelo núcleo vence.
 
-Na pasta do projeto, execute `python src` (Python 3.10+ com Tkinter, sem
-outras dependências). No Windows, dê dois cliques em `jogar.cmd`; ele usa o
-Python integrado ao Codex quando disponível, ou o comando `python` do sistema.
+Na pasta do projeto, execute `python src` (no Linux, `python3 src`), com Python
+3.10+ e Tkinter, sem outras dependências. No Windows, dê dois cliques em
+`jogar.cmd`; ele usa o Python integrado ao Codex quando disponível, ou o comando
+`python` do sistema.
+
+No Linux (Debian 12+, Ubuntu 22.04+, Pop!_OS), rode uma vez, na pasta do jogo:
+
+```bash
+bash instalar.sh
+```
+
+Se faltar o Tkinter (pacote `python3-tk`), ele pergunta e instala, pedindo a sua
+senha. Depois disso, o **ECOS** aparece no menu de aplicativos, com o núcleo de
+ECO como ícone, e abre o jogo desta pasta: um `git pull` já atualiza o jogo, e,
+se você mover a pasta, basta rodar o `instalar.sh` de novo. `bash instalar.sh
+--remover` tira o jogo do menu e mantém os recordes. Pelo terminal, `./jogar.sh`
+também abre o jogo. Se ele não abrir pelo menu, o motivo aparece num terminal.
+
 O jogo inteiro roda em português ou inglês: escolha em IDIOMA, no menu. Cada
 idioma tem seu banco de perguntas em `assets/questions/pt/` e
 `assets/questions/en/` (`easy.json`, `medium.json` e `hard.json`), com as mesmas
@@ -24,7 +39,11 @@ reserva e o menu avisa “BANCO DE PERGUNTAS INCOMPLETO”.
 Tudo é pixel art desenhada pelo próprio código numa tela de 320×200, com uma
 paleta fixa de 32 cores, e ampliada pelo maior fator inteiro que cabe na janela.
 Quando o formato da janela não bate, sobram faixas pretas, e o pixel nunca é
-esticado; a janela abre em 960×600, a escala 3 exata. Não há arquivos de imagem: salas, objetos, fonte e menu são montados na
+esticado; a janela abre em 960×600, a escala 3 exata. No Linux ela abre com cerca
+de 60% da tela, numa escala inteira, nunca menor que 960×600. O Tk não fala
+Wayland direto: no COSMIC (Pop!_OS 24.04) o pixel sai nítido, mas no GNOME com
+escala fracionada (125%, 150%…) o sistema amplia a janela e o pixel pode borrar.
+Não há arquivos de imagem: salas, objetos, fonte, menu e o ícone são montados na
 abertura do jogo.
 
 ECO fala pelos **guardiões**, estátuas encapuzadas com uma tela no rosto. O
@@ -174,16 +193,18 @@ Esc volta ao menu.
 
 O tempo vai do início da expedição até a fuga. Os cinco melhores de cada
 dificuldade ficam salvos como **recordes**, com seed, número de jogadores e data,
-em `%APPDATA%\ECOS\records.json` (fora do Windows, em `~/.local/share/ECOS`). A
-tela avisa quando a fuga entra na lista (“★ NOVO RECORDE · #2”). Um arquivo
+em `%APPDATA%\ECOS\records.json` (no Linux, em `~/.local/share/ECOS`, ou em
+`$XDG_DATA_HOME/ECOS` se essa variável existir). A tela avisa quando a fuga
+entra na lista (“★ NOVO RECORDE · #2”). Um arquivo
 ausente ou corrompido vale como placar vazio e nunca impede o jogo de abrir.
 
 ### Som
 
 Bipes de voz, porta, baú, armadilha, acerto e erro. Os sons são gerados pelo
 código na abertura do jogo, guardados numa pasta temporária e tocados pelo som
-padrão do Windows; um som novo corta o anterior. Em outros sistemas, o jogo roda
-em silêncio. O mudo fica no menu, no HUD (“SOM”) e em **Alt + M**.
+padrão do Windows ou, no Linux, pelo primeiro tocador instalado entre `pw-cat`
+(PipeWire), `pacat` (PulseAudio) e `aplay` (ALSA). Um som novo corta o anterior.
+Sem nenhum deles, o jogo roda em silêncio. O mudo fica no menu, no HUD (“SOM”) e em **Alt + M**.
 
 ## Para desenvolvedores
 
@@ -206,7 +227,8 @@ em silêncio. O mudo fica no menu, no HUD (“SOM”) e em **Alt + M**.
 | `pixel_view.py` | Composição no Tk e ampliação inteira |
 | `hud.py` | Mapa, cartões, caixa de diálogo e painel de resultado, em pixels |
 | `dialogue.py` | Ritmo das falas, letra por letra |
-| `audio.py` | Sons sintetizados e mudo |
+| `audio.py` | Sons sintetizados e mudo; Windows toca arquivos, Linux recebe um fluxo contínuo |
+| `icon.py` | O ícone do jogo: o núcleo de ECO, para a janela e o menu do Linux |
 | `records.py` | Recordes por dificuldade |
 | `dungeon_ui.py` | Tela da expedição e tela de resultado |
 | `menu_ui.py`, `menu_art.py` | Menu animado e suas camadas |
@@ -217,6 +239,9 @@ Rode os testes na raiz do projeto com:
 ```bash
 python -m unittest -v
 ```
+
+No Linux, o comando é `python3`. Na raiz ficam também os inicializadores:
+`jogar.cmd` (Windows), `jogar.sh` e `instalar.sh` (Linux).
 
 Os testes de interface (`test_dungeon_ui`, `test_menu_ui`) precisam de um display
 Tk; os demais rodam sem tela. O vocabulário do domínio (Dungeon, Expedition,

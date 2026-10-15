@@ -172,6 +172,23 @@ relógio da pergunta e o tempo da expedição, as regras não mudaram.
   título ECOS ao centro, as opções numa coluna e os recordes no canto,
   inteiramente usável pelo teclado.
 
+## Rodada 6: Linux
+
+O jogador de Debian 12+, Ubuntu 22.04+ e Pop!_OS passou a ter o mesmo que o de
+Windows. As regras não mudaram.
+
+- **Abrir:** `instalar.sh`, rodado uma vez, instala o Tkinter se faltar e põe o
+  ECOS no menu de aplicativos, apontando para a pasta do jogo; `jogar.sh` é o
+  `jogar.cmd` do Linux. Se o jogo não abrir pelo menu, o motivo aparece num
+  terminal, como o `pause` do Windows.
+- **Som:** o primeiro tocador instalado (`pw-cat`, `pacat` ou `aplay`) recebe um
+  fluxo contínuo, com só alguns milissegundos na fila, para os bipes de voz não
+  atrasarem; um som novo corta o anterior, como no Windows.
+- **Ícone:** o núcleo de ECO, desenhado pelo código, na janela (também no
+  Windows) e no menu.
+- **Janela:** no Linux abre com cerca de 60% da tela, nunca abaixo de 960×600,
+  porque um desktop a 150% pode entregar ao Tk os pixels nativos.
+
 ## Próximas rodadas propostas
 
 1. **Balanceamento por playtests.** Ajustar tamanhos, tempo por pergunta,

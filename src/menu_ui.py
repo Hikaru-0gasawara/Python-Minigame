@@ -5,6 +5,7 @@ import math
 import random
 import time
 import tkinter as tk
+import tkinter.font as tkfont
 
 import font
 import hud
@@ -30,8 +31,9 @@ MARGIN = 8
 FAR, NEAR = 3, 9                    # parallax: how many pixels per second each tower layer slides
 HINT = "↑↓ ←→ ENTER · F1 AJUDA"
 
-# The help dialog is a plain Tk window.
-PANEL, TEXT, GOLD, TEAL, CARD, LINE, FONT = "#0d1a21", "#edf8f8", "#efc788", "#56eee5", "#13262e", "#25414a", "Segoe UI"
+# The help dialog is a plain Tk window, in the first of these typefaces installed: Windows', then Linux's usual ones.
+PANEL, TEXT, GOLD, TEAL, CARD, LINE = "#0d1a21", "#edf8f8", "#efc788", "#56eee5", "#13262e", "#25414a"
+FONTS = ("Segoe UI", "Ubuntu", "Fira Sans", "Noto Sans", "DejaVu Sans")
 
 
 @functools.cache
@@ -332,9 +334,11 @@ class Setup(tk.Frame):
         dialog.configure(bg=PANEL, padx=26, pady=24)
         dialog.transient(self.app)
         dialog.resizable(False, False)
+        installed = set(tkfont.families(dialog))
+        family = next((name for name in FONTS if name in installed), "sans-serif")
 
         def label(text, size, color, **kwargs):
-            return tk.Label(dialog, text=text, bg=PANEL, fg=color, font=(FONT, size), **kwargs)
+            return tk.Label(dialog, text=text, bg=PANEL, fg=color, font=(family, size), **kwargs)
         label(t("CADA RESPOSTA ABRE UM CAMINHO"), 16, TEAL).pack(anchor="w", pady=(0, 18))
         for title, detail in (
             ("01  EXPLORE", "Um movimento por turno; seu mapa mostra só o que você descobriu.\nAlt + setas: mover. Alt + Q/E: olhar para os lados."),
@@ -346,7 +350,7 @@ class Setup(tk.Frame):
         close = tk.Button(dialog, text=t("ENTENDI   →"), command=dialog.destroy, bg=CARD, fg=TEXT,
                           activebackground="#23434b", activeforeground=TEXT, relief="flat", bd=0,
                           highlightthickness=1, highlightbackground=LINE, highlightcolor=TEAL,
-                          cursor="hand2", font=(FONT, 10, "bold"), padx=12, pady=8)
+                          cursor="hand2", font=(family, 10, "bold"), padx=12, pady=8)
         close.pack(fill="x", pady=(5, 0))
         for key in ("<Escape>", "<Return>"):
             dialog.bind(key, lambda event: dialog.destroy())

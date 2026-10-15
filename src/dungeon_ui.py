@@ -13,6 +13,7 @@ import font
 import hud
 from dialogue import Dialogue
 from dungeon import BUFFS, EFFECT_TEXT, Expedition, ROOMS, format_seed
+from icon import icon_png
 from lang import t
 from menu_ui import Setup
 from motion import smooth
@@ -35,12 +36,23 @@ REACT, GLITCH, STEP_ASIDE = .9, .5, .4   # after an answer: how long the Guardia
 ARRIVAL_LIGHTS = ((.25, "off"), (.32, "on"), (.40, "off"), (.50, "dimmed"), (math.inf, "on"))
 
 
+def opening_scale(app):
+    """The window opens at x3 on Windows. Elsewhere it takes about 60% of the screen, never below x3:
+    a Linux desktop scaled to 150% may hand Tk its native pixels, where x3 would be tiny."""
+    if sys.platform == "win32":
+        return 3
+    return max(3, int(.6 * min(app.winfo_screenwidth() / W, app.winfo_screenheight() / H)))
+
+
 class DungeonApp(tk.Tk):
     def __init__(self):
-        super().__init__()
+        super().__init__(className="ecos")   # Linux docks match the window ("Ecos") to the menu entry by this
         self.retitle()
-        self.geometry("960x600")             # exactly 320x200 at x3: no black bars at the start
-        self.minsize(960, 600)
+        self.icons = [tk.PhotoImage(master=self, data=icon_png(scale)) for scale in (1, 2)]
+        self.iconphoto(True, *self.icons)
+        scale = opening_scale(self)
+        self.geometry(f"{W * scale}x{H * scale}")   # a whole scale: no black bars at the start
+        self.minsize(W * 3, H * 3)
         self.configure(bg=BG)
         self.screen = None
         self.effects = tk.BooleanVar(value=True)

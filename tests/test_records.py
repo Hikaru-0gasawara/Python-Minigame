@@ -4,9 +4,10 @@ from datetime import date
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from dungeon import EASY, HARD
-from records import Records
+from records import Records, default_path
 
 
 class RecordsTests(unittest.TestCase):
@@ -59,3 +60,12 @@ class RecordsTests(unittest.TestCase):
         self.path.mkdir()                            # a folder where the file should be
         self.assertEqual(self.records.submit(EASY, 30, 1, 1), 1)
         self.assertEqual(self.records.top(EASY), [])
+
+    def test_the_file_lives_in_the_systems_data_folder(self):
+        home = {"HOME": "/home/p", "USERPROFILE": "/home/p"}     # USERPROFILE: Path.home() on Windows
+        with mock.patch.dict("os.environ", home, clear=True):
+            self.assertEqual(default_path(), Path("/home/p/.local/share/ECOS/records.json"))
+        with mock.patch.dict("os.environ", {"XDG_DATA_HOME": "/xdg"}, clear=True):
+            self.assertEqual(default_path(), Path("/xdg/ECOS/records.json"))
+        with mock.patch.dict("os.environ", {"APPDATA": "/appdata", "XDG_DATA_HOME": "/xdg"}, clear=True):
+            self.assertEqual(default_path(), Path("/appdata/ECOS/records.json"))

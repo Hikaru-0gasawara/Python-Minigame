@@ -15,7 +15,8 @@ KEEP = 5
 
 
 def default_path():
-    base = os.environ.get("APPDATA") or Path.home() / ".local" / "share"
+    """%APPDATA% on Windows; elsewhere XDG's data folder, ~/.local/share unless $XDG_DATA_HOME says otherwise."""
+    base = os.environ.get("APPDATA") or os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
     return Path(base) / "ECOS" / "records.json"
 
 

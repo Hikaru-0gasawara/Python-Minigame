@@ -19,7 +19,7 @@ from records import Records
 from scene import relative_portals, sector_of
 from .test_dungeon import make_combat
 from dungeon_ui import (ALT_MASK, ARRIVE, MESSAGE_TIME, OPEN, REACT, STEP, STEP_ASIDE, TURN_FADE, WALK, DungeonApp,
-                        ExpeditionScreen, ResultsScreen)
+                        ExpeditionScreen, ResultsScreen, opening_scale)
 from room_art import DOOR_STEPS, GUARDIAN_ASIDE, H, W
 
 
@@ -852,3 +852,18 @@ class DungeonUITests(unittest.TestCase):
         results.on_key(SimpleNamespace(keysym="Return"))
         self.app.update()
         self.assertIsInstance(self.app.screen, Setup)
+
+
+class OpeningScaleTests(unittest.TestCase):
+    def scale(self, platform, width, height):
+        screen = SimpleNamespace(winfo_screenwidth=lambda: width, winfo_screenheight=lambda: height)
+        with mock.patch("dungeon_ui.sys.platform", platform):
+            return opening_scale(screen)
+
+    def test_windows_always_opens_at_x3(self):
+        self.assertEqual(self.scale("win32", 3072, 1920), 3)
+
+    def test_elsewhere_the_window_takes_about_60_percent_of_the_screen_never_below_x3(self):
+        self.assertEqual(self.scale("linux", 1920, 1080), 3)        # as on Windows
+        self.assertEqual(self.scale("linux", 3072, 1920), 5)        # 150% handed over as native pixels
+        self.assertEqual(self.scale("linux", 1366, 768), 3)
