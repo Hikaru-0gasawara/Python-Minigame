@@ -165,12 +165,19 @@ pontilhadas; baús aparecem em âmbar, e nem todo baú é o que parece.
 
 O menu é uma cena animada: torres de servidores em paralaxe, o núcleo pulsante de
 ECO, cabos soltando faíscas e uma falha de imagem de vez em quando. À esquerda
-ficam o título e as opções: **Dificuldade**, **Jogadores**, **Seed**, **Som**,
-**Movimento** e **ENTRAR**. À direita ficam o núcleo e, no canto inferior, os
-**recordes** da dificuldade escolhida.
+ficam o título e três opções: **JOGAR**, **CONFIGURAÇÕES** e **SAIR**.
+
+- **JOGAR** reúne as escolhas da expedição: **Dificuldade**, **Jogadores**,
+  **Seed** e **ENTRAR**. No canto inferior direito ficam os **recordes** da
+  dificuldade escolhida. O jogo lembra as últimas escolhas.
+- **CONFIGURAÇÕES** reúne **Som**, **Música**, **Movimento** e **Idioma**. Elas
+  ficam salvas para a próxima vez, em `settings.json`, na mesma pasta dos
+  recordes.
+- **SAIR** fecha o jogo.
 
 - **↑ ↓** ou **Tab** escolhem a linha, **← →** mudam o valor, **Enter** ou
-  **espaço** confirmam. O mouse também funciona.
+  **espaço** confirmam. O mouse também funciona. **Esc** ou **← VOLTAR** voltam
+  ao título.
 - Na linha da seed, digite números e letras de A a F (e `-`).
 - **F1** abre o “Como jogar”.
 - **Movimento: reduzido** troca portas, zoom, desvanecimentos, diálogo letra por
@@ -200,11 +207,18 @@ ausente ou corrompido vale como placar vazio e nunca impede o jogo de abrir.
 
 ### Som
 
-Bipes de voz, porta, baú, armadilha, acerto e erro. Os sons são gerados pelo
-código na abertura do jogo, guardados numa pasta temporária e tocados pelo som
-padrão do Windows ou, no Linux, pelo primeiro tocador instalado entre `pw-cat`
-(PipeWire), `pacat` (PulseAudio) e `aplay` (ALSA). Um som novo corta o anterior.
-Sem nenhum deles, o jogo roda em silêncio. O mudo fica no menu, no HUD (“SOM”) e em **Alt + M**.
+Bipes de voz, porta, baú, armadilha, acerto e erro, e uma **música** ambiente,
+tudo gerado pelo código na abertura do jogo. O menu tem a sua música, e cada
+setor tem a dele: o raso é frio e esparso, o meio tem um baixo constante, e o
+fundo, um drone grave com sirene. A música segue o jogador da vez e troca
+suavemente. Enquanto uma pergunta corre, um relógio tiquetaqueia por cima, e ele
+dobra de velocidade nos últimos 5 segundos. Na pausa, o tique para.
+
+Um som novo corta o anterior, mas nunca a música. O jogo mistura tudo e toca pelo
+`waveOut` no Windows ou, no Linux, pelo primeiro tocador instalado entre `pw-cat`
+(PipeWire), `pacat` (PulseAudio) e `aplay` (ALSA). Sem nenhum deles, o jogo roda
+em silêncio. O mudo geral fica nas configurações, no HUD (“SOM”) e em **Alt + M**;
+a música se desliga sozinha em **CONFIGURAÇÕES**.
 
 ## Para desenvolvedores
 
@@ -227,11 +241,13 @@ Sem nenhum deles, o jogo roda em silêncio. O mudo fica no menu, no HUD (“SOM�
 | `pixel_view.py` | Composição no Tk e ampliação inteira |
 | `hud.py` | Mapa, cartões, caixa de diálogo e painel de resultado, em pixels |
 | `dialogue.py` | Ritmo das falas, letra por letra |
-| `audio.py` | Sons sintetizados e mudo; Windows toca arquivos, Linux recebe um fluxo contínuo |
+| `audio.py` | Efeitos sintetizados, o mixer e o fluxo de som para o Windows (waveOut) e o Linux |
+| `music.py` | A música ambiente: o menu, um tema por setor e o tique da tensão |
+| `settings.py` | As configurações salvas entre sessões |
 | `icon.py` | O ícone do jogo: o núcleo de ECO, para a janela e o menu do Linux |
 | `records.py` | Recordes por dificuldade |
 | `dungeon_ui.py` | Tela da expedição e tela de resultado |
-| `menu_ui.py`, `menu_art.py` | Menu animado e suas camadas |
+| `menu_ui.py`, `menu_art.py` | Menu animado (título, JOGAR, CONFIGURAÇÕES) e suas camadas |
 | `motion.py` | Curvas de animação |
 
 Rode os testes na raiz do projeto com:

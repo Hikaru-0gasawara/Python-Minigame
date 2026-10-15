@@ -14,11 +14,13 @@ import hud
 from dialogue import Dialogue
 from dungeon import BUFFS, EFFECT_TEXT, Expedition, ROOMS, format_seed
 from icon import icon_png
+import lang
 from lang import t
 from menu_ui import Setup
 from motion import smooth
 from pixel_view import PixelView
 from records import Records
+from settings import Settings
 from room_art import DOOR_STEPS, GUARDIAN_ASIDE, H, W
 from scene import portal_targets, relative_portals, scene_for, sector_of
 
@@ -27,6 +29,7 @@ BG = "#080e12"
 ALT_MASK = 0x20000 if sys.platform == "win32" else 0x8
 
 RESULTS_DELAY = 2.0  # Seconds the winning room stays on screen.
+URGENT = 5.0         # Seconds left on a Question when its tension quickens.
 MESSAGE_TIME = 4.0   # Seconds a note stays above the cards before the scene is left clear.
 OPEN, STEP = .30, .07          # a walk: the door opens, then each zoom step into the doorway
 WALK = OPEN + 6 * STEP
@@ -45,8 +48,10 @@ def opening_scale(app):
 
 
 class DungeonApp(tk.Tk):
-    def __init__(self):
+    def __init__(self, settings=None, audio=None):
         super().__init__(className="ecos")   # Linux docks match the window ("Ecos") to the menu entry by this
+        self.settings = settings or Settings()
+        lang.current = self.settings.language
         self.retitle()
         self.icons = [tk.PhotoImage(master=self, data=icon_png(scale)) for scale in (1, 2)]
         self.iconphoto(True, *self.icons)
@@ -55,10 +60,22 @@ class DungeonApp(tk.Tk):
         self.minsize(W * 3, H * 3)
         self.configure(bg=BG)
         self.screen = None
-        self.effects = tk.BooleanVar(value=True)
-        self.audio = Audio()
+        self.effects = tk.BooleanVar(value=self.settings.motion)
+        self.audio = audio or Audio()
+        self.audio.muted, self.audio.music = not self.settings.sound, self.settings.music
         self.records = Records()
         self.show_setup()
+
+    def change(self, **values):
+        """Change Settings: they apply at once and are kept for the next session."""
+        self.settings.change(**values)
+        s = self.settings
+        self.audio.muted, self.audio.music = not s.sound, s.music
+        if self.effects.get() != s.motion:
+            self.effects.set(s.motion)                 # its traces redraw what is on screen
+        if lang.current != s.language:
+            lang.current = s.language
+            self.retitle()
 
     def retitle(self):
         self.title(t("Python Trivia • A Masmorra dos Ecos"))
@@ -70,6 +87,8 @@ class DungeonApp(tk.Tk):
         screen.pack(fill="both", expand=True)
 
     def show_setup(self):
+        self.audio.ambience("menu")
+        self.audio.tension(None)
         self.swap(Setup(self))
 
     def start(self, difficulty, players, seed=None):
@@ -77,6 +96,8 @@ class DungeonApp(tk.Tk):
 
     def show_results(self, game):
         rank = self.records.submit(game.difficulty, game.elapsed, game.seed, len(game.players))
+        self.audio.ambience("menu")
+        self.audio.tension(None)
         self.swap(ResultsScreen(self, game, rank))
 
 
@@ -376,7 +397,7 @@ class ExpeditionScreen(tk.Frame):
             self._arrive(target, back=True)
 
     def toggle_mute(self):
-        self.app.audio.toggle_mute()
+        self.app.change(sound=not self.app.settings.sound)
         self.refresh()
 
     def use_buff(self, target):
@@ -729,7 +750,7 @@ class ExpeditionScreen(tk.Frame):
                     "mute": mute.texts,
                     "tab": self.tab_rect is not None}
 
-    def ambience(self, now):
+    def stir(self, now):
         """Spawn the room's ambient particles and stutter its broken tube and screens."""
         scene, rnd = self._scene, random.random
         for kind, x, y in scene.emitters:
@@ -748,6 +769,15 @@ class ExpeditionScreen(tk.Frame):
         if any(d[0] == "screen" for d in scene.decor) and now >= self._glitch_until and rnd() < .01:
             self._glitch_until = now + .15
 
+    def score(self):
+        """The Ambience of the Sector where the player whose Turn it is stands, tense while their Question's
+        clock runs and quicker in its last seconds; the pause hides the Question, and its tension with it."""
+        g = self.game
+        self.app.audio.ambience(sector_of(g.dungeon, g.current))
+        running = (g.status == "playing" and self.paused_at is None and g.question is not None
+                   and g.question_deadline is not None)
+        self.app.audio.tension(("urgent" if g.question_remaining <= URGENT else "tense") if running else None)
+
     def frame(self):
         now = self.now()
         # Let the winning moment land on screen, then hand over to the results.
@@ -755,6 +785,7 @@ class ExpeditionScreen(tk.Frame):
             self.job = None
             self.app.show_results(self.game)
             return
+        self.score()
         if self.paused_at is not None:      # a frozen frame: no clock, no Guardian, no particles
             self.job = self.after(100, self.frame)
             return
@@ -775,7 +806,7 @@ class ExpeditionScreen(tk.Frame):
         self.update_players(now)
         self.renderer.work()
         if self.app.effects.get() and self._scene is not None:
-            self.ambience(now)
+            self.stir(now)
         else:
             self.particles.clear()
         for p in self.particles:

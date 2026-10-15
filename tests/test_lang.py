@@ -37,7 +37,7 @@ def translated_texts():
     texts |= {text for letter, name, _ in scene.COMPASS for text in (letter, name)} | set(props.GRAFFITI)
     for table in (hud.SECTOR_NAMES, hud.TIER_NAMES, hud.POWER_NAMES, menu_ui.LABELS):
         texts |= set(table.values())
-    return texts | set(hud.ACTIONS) | set(hud.PAUSE_ACTIONS) | {menu_ui.HINT}
+    return texts | set(hud.ACTIONS) | set(hud.PAUSE_ACTIONS) | set(menu_ui.HINTS.values())
 
 
 class LanguageTests(unittest.TestCase):

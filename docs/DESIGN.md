@@ -189,6 +189,20 @@ Windows. As regras não mudaram.
 - **Janela:** no Linux abre com cerca de 60% da tela, nunca abaixo de 960×600,
   porque um desktop a 150% pode entregar ao Tk os pixels nativos.
 
+## Rodada 7: menu enxuto e música
+
+As regras não mudaram.
+
+- **Menu:** o título oferece só JOGAR, CONFIGURAÇÕES e SAIR. JOGAR guarda as
+  escolhas da expedição e mostra os recordes; CONFIGURAÇÕES guarda som, música,
+  movimento e idioma, que agora ficam salvos entre sessões.
+- **Música:** gerada pelo código, uma para o menu e uma por setor, seguindo o
+  jogador da vez. Durante a pergunta, um tique por cima, que dobra nos últimos 5
+  segundos.
+- **Som misturado:** música e efeitos tocam juntos. O jogo mistura tudo num fluxo
+  só, pelo `waveOut` no Windows (no lugar do `winsound`, que só toca um som por
+  vez) e pelo tocador do sistema no Linux (ADR-0005).
+
 ## Próximas rodadas propostas
 
 1. **Balanceamento por playtests.** Ajustar tamanhos, tempo por pergunta,

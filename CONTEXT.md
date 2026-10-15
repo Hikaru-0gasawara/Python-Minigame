@@ -30,6 +30,10 @@ _Avoid_: distance, floor, distância, profundidade (on-screen only)
 A band of Depth with its own look, so players can tell how deep they are: shallow, middle or deep.
 _Avoid_: zone, area, biome, setor (on-screen only)
 
+**Ambience**:
+The looping music of a Sector. While a Question is open it turns tense, quickening as the Question's time runs out.
+_Avoid_: soundtrack, theme, BGM, música (on-screen only)
+
 **Seed**:
 The value from which a Dungeon and everything placed in it is generated; it is shown to players so the same Dungeon can be replayed or shared.
 
@@ -101,6 +105,10 @@ _Avoid_: penalty, curse
 **Record**:
 One of the five best escape times kept for a Difficulty between Expeditions, with its Seed, player count and date.
 _Avoid_: high score, score, ranking
+
+**Settings**:
+The player's preferences that outlive Expeditions: sound, music, motion and language. Unlike Difficulty, player count and Seed, they are not chosen for an Expedition.
+_Avoid_: options, config, configurações (on-screen only)
 
 **Retreat**:
 Being sent back to the Room the player came from.

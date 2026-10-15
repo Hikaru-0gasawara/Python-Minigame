@@ -1,59 +1,37 @@
-"""Sounds synthesised into a cache folder and played through an injected player; no speakers needed."""
+"""Effects, the Audio the screens use, and the Linux stream, through fake players; no speakers needed."""
 
+from array import array
 from pathlib import Path
+import struct
 import sys
 import tempfile
 import unittest
-from unittest import mock
-import wave
 
 import audio
-from audio import SOUNDS, Audio, Stream, StreamPlayer
+from audio import SOUNDS, Audio, Mixer, effects, widen
 
 
 class AudioTests(unittest.TestCase):
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.folder = Path(tmp.name)
-        self.calls = []
+    def test_every_effect_is_made_once_as_16_bit_samples_at_most_half_loud(self):
+        made = effects()
+        self.assertEqual(set(made), set(SOUNDS))
+        for name, sound in made.items():
+            self.assertGreater(len(sound), 0, name)
+            self.assertLessEqual(max(map(abs, sound)), 2 ** 14, name)
+        self.assertIs(effects(), made)
 
-    def test_every_sound_is_generated_once_as_a_wav_file(self):
-        Audio(self.calls.append, self.folder)
-        files = sorted(self.folder.iterdir())
-        self.assertEqual([f.stem for f in files], sorted(SOUNDS))
-        for f in files:
-            with wave.open(str(f)) as w:
-                self.assertEqual((w.getnchannels(), w.getframerate()), (1, audio.RATE))
-                self.assertGreater(w.getnframes(), 0)
-        written = {f: f.stat().st_mtime_ns for f in files}
-        Audio(self.calls.append, self.folder)
-        self.assertEqual({f: f.stat().st_mtime_ns for f in files}, written)
-        self.assertEqual(self.calls, [])                     # nothing plays at startup
-
-    def test_play_hands_the_file_to_the_player(self):
-        sound = Audio(self.calls.append, self.folder)
+    def test_effects_sound_until_muted_and_muting_cuts_what_plays(self):
+        heard = []
+        sound = Audio(silent=True, listener=heard.append)
         sound.play("door")
-        self.assertEqual(self.calls, [str(self.folder / "door.wav")])
-
-    def test_mute_stops_what_plays_and_silences_everything_until_unmuted(self):
-        sound = Audio(self.calls.append, self.folder)
-        sound.toggle_mute()
-        for name in SOUNDS:
-            sound.play(name)
-        self.assertEqual(self.calls, [None])                 # only the stop
-        sound.toggle_mute()
-        sound.play("blip")
-        self.assertEqual(self.calls, [None, str(self.folder / "blip.wav")])
-
-    def test_without_a_system_player_every_call_is_a_silent_no_op(self):
-        with mock.patch.object(audio, "winsound", None), mock.patch.object(audio, "linux_player", lambda: None):
-            sound = Audio(folder=self.folder / "never")
+        sound.muted = True
         sound.play("chest")
-        sound.toggle_mute()
-        sound.toggle_mute()
-        self.assertIsNone(sound.player)
-        self.assertFalse((self.folder / "never").exists())  # nothing is written either
+        sound.muted = False
+        sound.play("blip")
+        self.assertEqual(heard, ["door", None, "blip"])
+
+    def test_the_stream_repeats_each_sample_on_two_frames_and_two_channels(self):
+        self.assertEqual(widen(array("h", (1, -2))), struct.pack("<8h", 1, 1, 1, 1, -2, -2, -2, -2))
 
 
 class LinuxStreamTests(unittest.TestCase):
@@ -62,49 +40,24 @@ class LinuxStreamTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.folder = Path(tmp.name)
 
-    def test_linux_uses_the_first_player_installed(self):
+    def test_linux_streams_to_the_first_player_installed(self):
         installed = {"pacat", "aplay"}
-        player = audio.linux_player(lambda name: name in installed and f"/usr/bin/{name}")
-        self.assertEqual(player.command[0], "pacat")
-        self.assertIsNone(audio.linux_player(lambda name: None))
+        self.assertEqual(audio.linux_command(lambda name: name in installed and f"/usr/bin/{name}")[0], "pacat")
+        self.assertIsNone(audio.linux_command(lambda name: None))
 
-    def test_a_sound_plays_through_then_silence_and_a_new_sound_cuts_the_old(self):
-        stream = Stream()
-        self.assertEqual(stream.chunk(4), bytes(4))
-        stream.play(b"abcdef")
-        self.assertEqual(stream.chunk(4) + stream.chunk(4), b"abcdef" + bytes(2))
-        stream.play(b"123456")
-        stream.chunk(2)
-        stream.play(b"xy")                                   # cut halfway
-        self.assertEqual(stream.chunk(4), b"xy" + bytes(2))
-        stream.play(b"")                                     # a stop is silence at once
-        self.assertEqual(stream.chunk(4), bytes(4))
-
-    def test_samples_are_16_bit_stereo_at_the_stream_rate(self):
-        path = audio.cache(self.folder)["door"]
-        with wave.open(path) as w:
-            frames = w.getnframes()
-        data = audio.stream_samples(path)
-        self.assertEqual(len(data), frames * audio.OUT_RATE // audio.RATE * 4)
-        self.assertEqual(data[:2], data[2:4])                 # both channels alike
-
-    def test_the_player_streams_the_sound_into_the_system_player(self):
-        path, heard = audio.cache(self.folder)["chest"], self.folder / "heard.raw"
-        sound = audio.stream_samples(path)
-        wanted = 2 ** 16 + 2 * len(sound)                    # enough to hold any silence before the sound
+    def test_the_mixed_stream_flows_into_the_system_player(self):
+        heard, chest = self.folder / "heard.raw", widen(effects()["chest"])
         fake = (sys.executable, "-c", "import sys; open(sys.argv[1], 'wb').write(sys.stdin.buffer.read(int(sys.argv[2])))",
-                str(heard), str(wanted))
-        player = StreamPlayer(fake)
-        player(path)
-        self.addCleanup(player.process.stdin.close)
-        player.process.wait(timeout=10)
-        self.assertIn(sound, heard.read_bytes())
+                str(heard), str(len(chest) + 4096))
+        mixer = Mixer(effects(), {})
+        mixer.play("chest")
+        process = audio.pipe_output(fake)(lambda samples: widen(mixer.chunk(samples)))
+        self.addCleanup(process.stdin.close)
+        process.wait(timeout=10)
+        self.assertTrue(heard.read_bytes().startswith(chest))
 
     def test_a_player_that_quits_leaves_the_game_silent_not_broken(self):
-        path = audio.cache(self.folder)["blip"]
-        player = StreamPlayer((sys.executable, "-c", "pass"))
-        player(path)
-        self.addCleanup(player.process.stdin.close)
-        player.process.wait(timeout=10)
-        player(path)                                         # writing into nothing raises nowhere
-        player(None)
+        process = audio.pipe_output((sys.executable, "-c", "pass"))(lambda samples: bytes(4 * 2 * samples))
+        self.addCleanup(process.stdin.close)
+        process.wait(timeout=10)
+        self.assertIsNone(audio.pipe_output(("no-such-player-anywhere",))(lambda samples: b""))

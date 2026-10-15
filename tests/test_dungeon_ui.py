@@ -16,6 +16,7 @@ from questions import load_tier
 from dungeon import DEBUFFS, EXIT_HITS, Expedition
 from menu_ui import Setup
 from records import Records
+from settings import Settings
 from scene import relative_portals, sector_of
 from .test_dungeon import make_combat
 from dungeon_ui import (ALT_MASK, ARRIVE, MESSAGE_TIME, OPEN, REACT, STEP, STEP_ASIDE, TURN_FADE, WALK, DungeonApp,
@@ -25,12 +26,12 @@ from room_art import DOOR_STEPS, GUARDIAN_ASIDE, H, W
 
 class DungeonUITests(unittest.TestCase):
     def setUp(self):
-        self.app = DungeonApp()
-        self.app.effects.set(False)
-        self.sounds = []          # the names played; None is a stop
-        self.app.audio = Audio(lambda path: self.sounds.append(path and Path(path).stem))
-        folder = tempfile.TemporaryDirectory()      # never the player's own Records
+        folder = tempfile.TemporaryDirectory()      # never the player's own Records or Settings
         self.addCleanup(folder.cleanup)
+        self.sounds = []          # the effects heard; None is muting
+        self.app = DungeonApp(settings=Settings(Path(folder.name) / "settings.json"),
+                              audio=Audio(silent=True, listener=self.sounds.append))
+        self.app.effects.set(False)
         self.app.records = Records(Path(folder.name) / "records.json")
         # Keep the test window off the user's visible desktop.
         self.app.geometry("1000x760+20000+20000")
@@ -82,6 +83,45 @@ class DungeonUITests(unittest.TestCase):
         g.active.exit_hits = EXIT_HITS - 1
         screen.enter([room.key for room in g.exits()].index(exit_key))
         self.solve(screen)
+
+    # ---------------------------------------------------------------- the Ambience
+
+    def music(self):
+        mixer = self.app.audio.mixer
+        return mixer.music, mixer.ticks
+
+    def test_the_ambience_is_the_sector_of_the_player_whose_turn_it_is(self):
+        screen = self.start_seeded(players=2)
+        g = screen.game
+        self.pump()
+        self.assertEqual(self.music(), ("shallow", None))
+        g.players[1].position = next(room.key for room in g.dungeon.rooms.values()
+                                     if sector_of(g.dungeon, room) == "deep")
+        g.player = 1                                  # J2's Turn, deep in the Dungeon
+        self.pump()
+        self.assertEqual(self.music(), ("deep", None))
+
+    def test_tension_runs_with_the_question_clock_quickens_at_the_end_and_rests_in_the_pause(self):
+        screen = self.start_seeded()
+        screen.enter(0)                               # reduced motion: the Question and its clock at once
+        g = screen.game
+        self.pump()
+        self.assertEqual(self.music()[1], "tense")
+        g.question_deadline = g.clock() + 3          # its last seconds
+        self.pump()
+        self.assertEqual(self.music()[1], "urgent")
+        screen.toggle_pause()
+        self.pump()
+        self.assertIsNone(self.music()[1])
+        screen.toggle_pause()
+        self.solve(screen)
+        self.pump()
+        self.assertIsNone(self.music()[1])
+
+    def test_the_menu_and_the_results_play_the_menus_ambience(self):
+        self.assertEqual(self.music(), ("menu", None))
+        game, results = self.finish_and_show_results()
+        self.assertEqual(self.music(), ("menu", None))
 
     # ---------------------------------------------------------------- the frame
 

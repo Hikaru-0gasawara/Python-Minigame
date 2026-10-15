@@ -1,4 +1,8 @@
-"""The launch screen: an animated pixel scene with the ECOS title, a column of options and the Records."""
+"""The launch screen: an animated pixel scene with the ECOS title and a column of options on three pages.
+
+The title offers JOGAR, CONFIGURAÇÕES and SAIR. JOGAR holds the Expedition's choices,
+with the Records of the chosen Difficulty; CONFIGURAÇÕES holds the Settings.
+"""
 
 import functools
 import math
@@ -19,9 +23,13 @@ from pixels import Pix
 from questions import QuestionBank
 from room_art import H, W
 
-ROWS = ("difficulty", "players", "seed", "sound", "motion", "language", "start")
-LABELS = {"difficulty": "DIFICULDADE", "players": "JOGADORES", "seed": "SEED", "sound": "SOM", "motion": "MOVIMENTO",
-          "language": "IDIOMA"}
+PAGES = {"title": ("play", "settings", "quit"),
+         "play": ("difficulty", "players", "seed", "start", "back"),
+         "settings": ("sound", "music", "motion", "language", "back")}
+LABELS = {"play": "JOGAR", "settings": "CONFIGURAÇÕES", "quit": "SAIR", "start": "ENTRAR →", "back": "← VOLTAR",
+          "difficulty": "DIFICULDADE", "players": "JOGADORES", "seed": "SEED", "sound": "SOM", "music": "MÚSICA",
+          "motion": "MOVIMENTO", "language": "IDIOMA"}
+BUTTONS = {"play", "settings", "quit", "start", "back"}         # rows that act, without a value: centred
 SEED_CHARS = "0123456789abcdefABCDEF-"
 SEED_LENGTH = 9                     # 3F9A-12C0
 # Two columns: title and options on the left, ECO's core and the Records on the right.
@@ -29,7 +37,7 @@ TITLE_AT, TITLE_ZOOM = (14, 10), 4
 COLUMN_AT, VALUE_X = (10, 64), 77
 MARGIN = 8
 FAR, NEAR = 3, 9                    # parallax: how many pixels per second each tower layer slides
-HINT = "↑↓ ←→ ENTER · F1 AJUDA"
+HINTS = {"title": "↑↓ ENTER · F1 AJUDA", "play": "↑↓ ←→ ENTER · F1 AJUDA", "settings": "↑↓ ←→ ENTER · F1 AJUDA"}
 
 # The help dialog is a plain Tk window, in the first of these typefaces installed: Windows', then Linux's usual ones.
 PANEL, TEXT, GOLD, TEAL, CARD, LINE = "#0d1a21", "#edf8f8", "#efc788", "#56eee5", "#13262e", "#25414a"
@@ -61,44 +69,36 @@ def veil(w, h):
     return p
 
 
-def column(difficulty, players, seed, muted, effects, focus, bank_broken=False):
-    """The options, one row each, with the focused one lit, then the Difficulty's numbers and the keys.
-
-    A question file that failed to load takes the numbers' place, so nobody plays three spare questions unaware.
+def column(page, values, focus, stats="", alert=False):
+    """A page's rows, the focused one lit, then a line of stats (or an alert) and the keys.
 
     Regions are (("row", i), rect) and (("help",), rect) for the keys line.
     """
-    name, rooms, seconds, _tiers = MODES[difficulty]
-    values = {"difficulty": t(name).upper(), "players": str(players),
-              "seed": seed + "_" if ROWS[focus] == "seed" else seed or t("ALEATÓRIA"),
-              "sound": t("MUDO" if muted else "LIGADO"), "motion": t("COMPLETO" if effects else "REDUZIDO"),
-              "language": lang.LANGUAGES[lang.current]}
+    rows = PAGES[page]
     width = VALUE_X + font.measure("← AVENTUREIRO →") + 6
-    p = veil(width, (len(ROWS) + 2) * font.LINE + 8)
+    p = veil(width, (len(rows) + 2) * font.LINE + 8)
     x0, y0 = COLUMN_AT
     piece = hud.Piece(p, x0, y0)
-    for i, row in enumerate(ROWS):
+    for i, row in enumerate(rows):
         y, lit = 2 + i * font.LINE, i == focus
         if lit:
             p.rect(1, y, width - 2, y + font.LINE - 1, hud.EDGE)
-        if row == "start":
-            text = t("ENTRAR →")
+        label = t(LABELS[row])
+        if row in BUTTONS:
+            text = label
             font.draw(p, (width - font.measure(text)) // 2, y, text, hud.GOLD if lit else hud.TEXT, shadow=0)
         else:
             value = f"← {values[row]} →" if lit and row != "seed" else values[row]
-            label = t(LABELS[row])
             font.draw(p, 6, y, label, hud.TEXT if lit else hud.MUTED, shadow=0)
             font.draw(p, VALUE_X, y, value, hud.GOLD if lit else hud.TEXT, shadow=0)
             text = f"{label} {value}"
         piece.texts.append(text)
         piece.regions.append((("row", i), (x0 + 1, y0 + y, x0 + width - 2, y0 + y + font.LINE - 1)))
-    stats = (t("BANCO DE PERGUNTAS INCOMPLETO") if bank_broken
-             else f"{seconds}s {t('POR PERGUNTA')} · {rooms} {t('SALAS')}")
-    hint = t(HINT)
-    y = 4 + len(ROWS) * font.LINE
-    font.draw(p, (width - font.measure(stats)) // 2, y, stats, hud.ALERT if bank_broken else hud.MUTED, shadow=0)
+    hint = t(HINTS[page])
+    y = 4 + len(rows) * font.LINE
+    font.draw(p, (width - font.measure(stats)) // 2, y, stats, hud.ALERT if alert else hud.MUTED, shadow=0)
     font.draw(p, (width - font.measure(hint)) // 2, y + font.LINE, hint, hud.MUTED, shadow=0)
-    piece.texts += [stats, hint]
+    piece.texts += [text for text in (stats, hint) if text]
     piece.regions.append((("help",), (x0, y0 + y + font.LINE, x0 + width - 1, y0 + y + 2 * font.LINE - 1)))
     return piece
 
@@ -133,7 +133,7 @@ class Setup(tk.Frame):
         self.difficulty = getattr(app, "menu_difficulty", 1)
         self.players = getattr(app, "menu_players", 1)
         self.seed = ""
-        self.focus = 0
+        self.page, self.rows, self.focus = "title", PAGES["title"], 0
         self.bank_broken = QuestionBank().fallback
         self.tops = {}                  # each Difficulty's Records, read once: refresh runs on every key
         self.animation_job = None
@@ -162,42 +162,70 @@ class Setup(tk.Frame):
 
     # ---------------------------------------------------------------- choices
 
-    def change(self, row, step=1):
-        """Step a row: Difficulty and players cycle, sound and motion toggle, the Seed and ENTRAR start."""
-        if row == "difficulty":
-            self.difficulty = (self.difficulty - 1 + step) % len(MODES) + 1
-        elif row == "players":
-            self.players = (self.players - 1 + step) % 4 + 1
-        elif row == "sound":
-            self.app.audio.toggle_mute()
-        elif row == "language":
-            codes = list(lang.LANGUAGES)
-            lang.current = codes[(codes.index(lang.current) + step) % len(codes)]
-            self.bank_broken = QuestionBank().fallback      # each language has its own question files
-            self.app.retitle()
-        elif row == "motion":
-            self.app.effects.set(not self.app.effects.get())    # its trace redraws the menu
-            return
-        else:
-            self.start()
-            return
+    def show(self, page, focus=None):
+        """Open a page with the cursor on its first row, or on `focus`."""
+        self.page, self.rows = page, PAGES[page]
+        self.focus = self.rows.index(focus) if focus in self.rows else 0
         self.refresh()
+
+    def values(self):
+        name = MODES[self.difficulty][0]
+        settings = self.app.settings
+        return {"difficulty": t(name).upper(), "players": str(self.players),
+                "seed": self.seed + "_" if self.rows[self.focus] == "seed" else self.seed or t("ALEATÓRIA"),
+                "sound": t("LIGADO" if settings.sound else "MUDO"),
+                "music": t("LIGADA" if settings.music else "DESLIGADA"),
+                "motion": t("COMPLETO" if self.app.effects.get() else "REDUZIDO"),
+                "language": lang.LANGUAGES[lang.current]}
+
+    def change(self, row, step=1):
+        """Take a row: buttons open a page, start or quit; Difficulty and players cycle; Settings switch."""
+        settings = self.app.settings
+        if row in ("play", "settings"):
+            self.show(row)
+        elif row == "back":
+            self.show("title", focus=self.page)
+        elif row == "quit":
+            self.app.destroy()
+        elif row in ("start", "seed"):               # Enter on a typed Seed starts it at once
+            self.start()
+        elif row == "motion":
+            self.app.change(motion=not self.app.effects.get())    # its trace redraws the menu
+        else:
+            if row == "difficulty":
+                self.difficulty = (self.difficulty - 1 + step) % len(MODES) + 1
+            elif row == "players":
+                self.players = (self.players - 1 + step) % 4 + 1
+            elif row == "sound":
+                self.app.change(sound=not settings.sound)
+            elif row == "music":
+                self.app.change(music=not settings.music)
+            elif row == "language":
+                codes = list(lang.LANGUAGES)
+                self.app.change(language=codes[(codes.index(lang.current) + step) % len(codes)])
+                self.bank_broken = QuestionBank().fallback      # each language has its own question files
+            self.refresh()
 
     def start(self):
         self.app.menu_difficulty, self.app.menu_players = self.difficulty, self.players
         self.app.start(self.difficulty, self.players, parse_seed(self.seed))
 
     def on_key(self, event):
-        """Up, Down and Tab move between rows; Left and Right change a value; Enter takes the row; F1 helps."""
-        row, key = ROWS[self.focus], event.keysym
+        """Up, Down and Tab move between rows; Left and Right change a value; Enter takes the row;
+        Esc goes back to the title; F1 helps."""
+        row, key = self.rows[self.focus], event.keysym
         if key == "F1":
             self._show_help()
+        elif key == "Escape":
+            if self.page == "title":
+                return None
+            self.show("title", focus=self.page)
         elif key in ("Up", "Down", "Tab", "ISO_Left_Tab"):
             back = key in ("Up", "ISO_Left_Tab") or (key == "Tab" and event.state & 1)
-            self.focus = (self.focus + (-1 if back else 1)) % len(ROWS)
+            self.focus = (self.focus + (-1 if back else 1)) % len(self.rows)
             self.refresh()
         elif key in ("Left", "Right"):
-            if row not in ("seed", "start"):
+            if row != "seed" and row not in BUTTONS:
                 self.change(row, -1 if key == "Left" else 1)
         elif key in ("Return", "KP_Enter") or (key == "space" and row != "seed"):
             self.change(row)
@@ -231,10 +259,10 @@ class Setup(tk.Frame):
             self._show_help()
         elif action:
             self.focus = action[1]
-            if ROWS[self.focus] == "seed":
+            if self.rows[self.focus] == "seed":
                 self.refresh()                # a click only puts the cursor in the Seed
             else:
-                self.change(ROWS[self.focus])
+                self.change(self.rows[self.focus])
 
     # ---------------------------------------------------------------- drawing
 
@@ -242,12 +270,15 @@ class Setup(tk.Frame):
         """Rebuild the panels: the subtitle, the options and the Records."""
         if self._dead:
             return
-        if self.difficulty not in self.tops:
-            self.tops[self.difficulty] = self.app.records.top(self.difficulty)
+        _name, rooms, seconds, _tiers = MODES[self.difficulty]
+        stats = (t("BANCO DE PERGUNTAS INCOMPLETO") if self.bank_broken
+                 else f"{seconds}s {t('POR PERGUNTA')} · {rooms} {t('SALAS')}" if self.page == "play" else "")
         pieces = {"subtitle": caption(t("A MASMORRA DOS ECOS"), hud.GOLD, TITLE_AT[1] + 36, x=TITLE_AT[0] + 1),
-                  "column": column(self.difficulty, self.players, self.seed, self.app.audio.muted,
-                                   self.app.effects.get(), self.focus, self.bank_broken),
-                  "records": records_panel(self.tops[self.difficulty], self.difficulty)}
+                  "column": column(self.page, self.values(), self.focus, stats, self.bank_broken)}
+        if self.page == "play":
+            if self.difficulty not in self.tops:
+                self.tops[self.difficulty] = self.app.records.top(self.difficulty)
+            pieces["records"] = records_panel(self.tops[self.difficulty], self.difficulty)
         self._photos = [(tk.PhotoImage(master=self.canvas, data=piece.pix.png()), piece.x, piece.y)
                         for piece in pieces.values()]
         self.pieces = pieces

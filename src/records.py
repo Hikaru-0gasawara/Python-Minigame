@@ -14,10 +14,15 @@ from pathlib import Path
 KEEP = 5
 
 
-def default_path():
-    """%APPDATA% on Windows; elsewhere XDG's data folder, ~/.local/share unless $XDG_DATA_HOME says otherwise."""
+def data_folder():
+    """The game's folder among the user's data: %APPDATA% on Windows; elsewhere XDG's data folder,
+    ~/.local/share unless $XDG_DATA_HOME says otherwise. The Settings live there too."""
     base = os.environ.get("APPDATA") or os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
-    return Path(base) / "ECOS" / "records.json"
+    return Path(base) / "ECOS"
+
+
+def default_path():
+    return data_folder() / "records.json"
 
 
 class Records:
