@@ -31,8 +31,12 @@ A band of Depth with its own look, so players can tell how deep they are: shallo
 _Avoid_: zone, area, biome, setor (on-screen only)
 
 **Ambience**:
-The looping music of a Sector. While a Question is open it turns tense, quickening as the Question's time runs out.
+The looping music behind play: one for the menu and one for each Sector, following the player whose Turn it is.
 _Avoid_: soundtrack, theme, BGM, música (on-screen only)
+
+**Tension**:
+A clock ticking over the Ambience while a Question's time runs, twice as fast in its last seconds.
+_Avoid_: suspense, countdown music
 
 **Seed**:
 The value from which a Dungeon and everything placed in it is generated; it is shown to players so the same Dungeon can be replayed or shared.

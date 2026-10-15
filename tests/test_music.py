@@ -3,7 +3,8 @@
 import unittest
 
 import music
-from audio import RATE, effects
+from audio import effect_samples
+from synth import RATE
 
 
 class MusicTests(unittest.TestCase):
@@ -17,14 +18,14 @@ class MusicTests(unittest.TestCase):
             self.assertEqual(len(loop), round(seconds * RATE), name)
             self.assertEqual(loop, music.render(piece), name)
 
-    def test_a_loop_is_exactly_one_turn_of_the_music_playing_forever(self):
+    def test_a_loop_is_exactly_one_pass_of_the_music_playing_forever(self):
         for name, piece in music.PIECES.items():
             loop, twice = music.render(piece), music.render(piece, repeats=2)
             self.assertEqual(twice[len(loop):], loop, name)      # tails that cross the end carry on at the start
 
     def test_the_music_stays_under_the_effects_so_ambience_tension_and_an_effect_never_clip(self):
         loudest = {name: max(map(abs, music.compose(name))) for name in music.PIECES}
-        effect = max(max(map(abs, sound)) for sound in effects().values())
+        effect = max(max(map(abs, sound)) for sound in effect_samples().values())
         ambience = max(loudest[name] for name in ("menu", "shallow", "middle", "deep"))
         tension = max(loudest["tense"], loudest["urgent"])
         self.assertLess(ambience, effect)

@@ -87,8 +87,7 @@ class DungeonUITests(unittest.TestCase):
     # ---------------------------------------------------------------- the Ambience
 
     def music(self):
-        mixer = self.app.audio.mixer
-        return mixer.music, mixer.ticks
+        return self.app.audio.cued
 
     def test_the_ambience_is_the_sector_of_the_player_whose_turn_it_is(self):
         screen = self.start_seeded(players=2)

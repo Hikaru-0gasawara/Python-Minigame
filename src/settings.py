@@ -5,17 +5,16 @@ a failed save keeps the change for this session only and never stops the game.
 """
 
 import json
-import os
 from pathlib import Path
 
 from lang import LANGUAGES
-from records import data_folder
+from storage import data_folder, save_json
 
 DEFAULTS = {"sound": True, "music": True, "motion": True, "language": "pt"}
 
 
 def valid(name, value):
-    return value in LANGUAGES if name == "language" else isinstance(value, bool)
+    return isinstance(value, str) and value in LANGUAGES if name == "language" else isinstance(value, bool)
 
 
 class Settings:
@@ -35,11 +34,4 @@ class Settings:
     def change(self, **values):
         for name, value in values.items():
             setattr(self, name, value)
-        try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = self.path.with_suffix(".tmp")
-            temporary.write_text(json.dumps({name: getattr(self, name) for name in DEFAULTS}, indent=1),
-                                 encoding="utf-8")
-            os.replace(temporary, self.path)          # never leave a half-written file behind
-        except OSError:
-            pass
+        save_json(self.path, {name: getattr(self, name) for name in DEFAULTS})

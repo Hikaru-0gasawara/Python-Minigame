@@ -133,7 +133,7 @@ class Setup(tk.Frame):
         self.difficulty = getattr(app, "menu_difficulty", 1)
         self.players = getattr(app, "menu_players", 1)
         self.seed = ""
-        self.page, self.rows, self.focus = "title", PAGES["title"], 0
+        self.page, self.focus = "title", 0
         self.bank_broken = QuestionBank().fallback
         self.tops = {}                  # each Difficulty's Records, read once: refresh runs on every key
         self.animation_job = None
@@ -162,9 +162,13 @@ class Setup(tk.Frame):
 
     # ---------------------------------------------------------------- choices
 
+    @property
+    def rows(self):
+        return PAGES[self.page]
+
     def show(self, page, focus=None):
         """Open a page with the cursor on its first row, or on `focus`."""
-        self.page, self.rows = page, PAGES[page]
+        self.page = page
         self.focus = self.rows.index(focus) if focus in self.rows else 0
         self.refresh()
 

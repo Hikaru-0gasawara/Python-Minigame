@@ -218,7 +218,7 @@ Um som novo corta o anterior, mas nunca a música. O jogo mistura tudo e toca pe
 `waveOut` no Windows ou, no Linux, pelo primeiro tocador instalado entre `pw-cat`
 (PipeWire), `pacat` (PulseAudio) e `aplay` (ALSA). Sem nenhum deles, o jogo roda
 em silêncio. O mudo geral fica nas configurações, no HUD (“SOM”) e em **Alt + M**;
-a música se desliga sozinha em **CONFIGURAÇÕES**.
+para desligar só a música, use **MÚSICA** em **CONFIGURAÇÕES**.
 
 ## Para desenvolvedores
 
@@ -242,7 +242,9 @@ a música se desliga sozinha em **CONFIGURAÇÕES**.
 | `hud.py` | Mapa, cartões, caixa de diálogo e painel de resultado, em pixels |
 | `dialogue.py` | Ritmo das falas, letra por letra |
 | `audio.py` | Efeitos sintetizados, o mixer e o fluxo de som para o Windows (waveOut) e o Linux |
-| `music.py` | A música ambiente: o menu, um tema por setor e o tique da tensão |
+| `music.py` | A música ambiente: a do menu, uma por setor e o tique da tensão |
+| `synth.py` | Do que os sons são feitos: taxa de amostragem, formas de onda, ruído e a soma |
+| `storage.py` | A pasta de dados do jogador e a gravação segura dos recordes e configurações |
 | `settings.py` | As configurações salvas entre sessões |
 | `icon.py` | O ícone do jogo: o núcleo de ECO, para a janela e o menu do Linux |
 | `records.py` | Recordes por dificuldade |

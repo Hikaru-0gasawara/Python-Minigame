@@ -8,17 +8,11 @@ failed save loses the new Record but never the game.
 from datetime import date
 import json
 import math
-import os
 from pathlib import Path
 
+from storage import data_folder, save_json
+
 KEEP = 5
-
-
-def data_folder():
-    """The game's folder among the user's data: %APPDATA% on Windows; elsewhere XDG's data folder,
-    ~/.local/share unless $XDG_DATA_HOME says otherwise. The Settings live there too."""
-    base = os.environ.get("APPDATA") or os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share"
-    return Path(base) / "ECOS"
 
 
 def default_path():
@@ -56,11 +50,5 @@ class Records:
         del records[KEEP:]
         if not any(r is record for r in records):
             return None
-        try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = self.path.with_suffix(".tmp")
-            temporary.write_text(json.dumps(board, indent=1), encoding="utf-8")
-            os.replace(temporary, self.path)          # never leave a half-written file behind
-        except OSError:
-            pass
+        save_json(self.path, board)
         return next(i for i, r in enumerate(records) if r is record) + 1

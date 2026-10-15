@@ -1,8 +1,8 @@
-"""The Ambience: chiptune loops for the menu and each Sector, and the ticks of tension. Independent of Tk.
+"""The Ambience: chiptune loops for the menu and each Sector, and the ticks of Tension. Independent of Tk.
 
 A piece is a few bars of voices written on a grid of sixteenth notes and rendered
 once, at startup, into 16-bit samples. A note that rings past the end of the loop
-carries on at its start, so the loop is exactly one turn of the music playing
+carries on at its start, so the loop is exactly one pass of the music playing
 forever and repeats without a seam. Levels stay under the effects', so that the
 mixer's sum of Ambience, tension and an effect never clips (ADR-0005).
 """
@@ -11,10 +11,9 @@ from array import array
 from dataclasses import dataclass
 import functools
 
-from audio import NOISE, RATE, add
+from synth import FULL, RATE, add, wave
 
 STEPS = 4                    # grid steps per beat: sixteenth notes
-FULL = 2 ** 15 - 1
 NAMES = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
 
@@ -118,19 +117,13 @@ def tone(note, frames, shape, envelope, volume):
     for i in range(frames):
         t = i / frames
         phase += step
-        if shape == "square":
-            v = 1 if phase % 1 < .5 else -1
-        elif shape == "triangle":
-            v = 4 * abs(phase % 1 - .5) - 1
-        else:
-            v = NOISE[int(phase) % len(NOISE)]
         if envelope == "pluck":
             level = (1 - t) ** 2
         elif envelope == "pad":
             level = min(1, t / .15, (1 - t) / .3)
         else:
             level = (1 - t) ** 6
-        out[i] = int(v * level * volume * FULL)
+        out[i] = int(wave(shape, phase) * level * volume * FULL)
     return out
 
 

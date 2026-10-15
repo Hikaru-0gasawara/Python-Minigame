@@ -11,5 +11,5 @@ The Ambience has to play under the effects, but Windows' `winsound` plays one so
 ## Consequences
 
 - The mixer runs on a thread and costs a little CPU all the time, even in silence.
-- Sound latency is the queue behind the player: about 23 ms on Linux and 70 ms on Windows.
+- Sound latency is the queue behind the player: about 23 ms on Linux and 90 ms on Windows.
 - The Windows output cannot be tested on Linux; it needs a run on Windows after every change to it.

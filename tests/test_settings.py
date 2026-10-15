@@ -31,6 +31,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual((settings.sound, settings.music, settings.language), (False, True, "pt"))
         self.path.write_text("[1, 2]", encoding="utf-8")
         self.assertTrue(Settings(self.path).sound)
+        self.path.write_text('{"language": ["en"], "motion": {}}', encoding="utf-8")
+        self.assertEqual((Settings(self.path).language, Settings(self.path).motion), ("pt", True))
 
     def test_a_failed_save_keeps_the_change_for_this_session_and_never_raises(self):
         self.path.mkdir(parents=True)                  # a folder where the file should be

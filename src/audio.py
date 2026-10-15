@@ -11,22 +11,20 @@ silent but otherwise the same.
 import array
 import ctypes
 import functools
-import operator
-import random
 import shutil
 import subprocess
 import sys
 import threading
+
+import music
+from synth import FULL, RATE, add, wave
 
 try:
     import fcntl
 except ImportError:          # Windows
     fcntl = None
 
-RATE = 22050                 # the mixer's samples: 16-bit mono
 FADE = RATE // 2             # a new Ambience fades in over half a second
-_rng = random.Random(7)
-NOISE = [_rng.uniform(-1, 1) for _ in range(4096)]
 
 # Each sound is notes played one after another: (start Hz, end Hz, seconds, shape, volume).
 SOUNDS = {
@@ -41,47 +39,39 @@ SOUNDS = {
 
 
 def samples(notes):
-    """Each note sweeps its pitch and fades out; noise is pitched by how fast it steps through a table."""
+    """Each note sweeps its pitch and fades out."""
     out = []
     for f0, f1, seconds, shape, volume in notes:
         n, phase = int(RATE * seconds), 0.
         for i in range(n):
             t = i / n
             phase += (f0 + (f1 - f0) * t) / RATE
-            if shape == "square":
-                v = 1 if phase % 1 < .5 else -1
-            elif shape == "triangle":
-                v = 4 * abs(phase % 1 - .5) - 1
-            else:
-                v = NOISE[int(phase) % len(NOISE)]
-            out.append(v * volume * (1 - t))
+            out.append(wave(shape, phase) * volume * (1 - t))
     return out
 
 
 @functools.cache
-def effects():
+def effect_samples():
     """Every effect as 16-bit samples, made once per run."""
-    return {name: array.array("h", (int(v * (2 ** 15 - 1)) for v in samples(notes))) for name, notes in SOUNDS.items()}
-
-
-def add(out, part):
-    """Sum `part` into the start of `out`; levels are set so that the sum never clips."""
-    n = len(part)
-    out[:n] = array.array("h", map(operator.add, out[:n], part))
+    return {name: array.array("h", (int(v * FULL) for v in samples(notes))) for name, notes in SOUNDS.items()}
 
 
 def looped(sound, at, frames):
     """`frames` of a loop from position `at`, wrapping round to its start."""
-    reps = (at % len(sound) + frames) // len(sound) + 1
     start = at % len(sound)
-    return (sound * reps)[start:start + frames]
+    return (sound * ((start + frames) // len(sound) + 1))[start:start + frames]
+
+
+def silence(frames):
+    return array.array("h", bytes(2 * frames))
 
 
 class Mixer:
-    """What the speakers get next, one chunk of RATE samples at a time: the Ambience, its tension and one effect.
+    """What the speakers get next, one chunk of RATE samples at a time: the Ambience, its Tension and one effect.
 
     A new effect cuts the previous effect, never the music. A new Ambience fades in
-    over the old one for `fade` samples. Loops not composed yet are silence.
+    over the old one for `fade` samples; asked for during a fade, it waits for the
+    fade to end rather than cut the sound. Loops not composed yet are silence.
     """
 
     def __init__(self, effects, loops, fade=0):
@@ -89,9 +79,10 @@ class Mixer:
         self.lock = threading.Lock()
         self.muted, self.music_on = False, True
         self.effect, self.effect_at = None, 0
-        self.music, self.music_at = None, 0
-        self.fading, self.fading_at, self.faded = None, 0, 0     # the old Ambience, where it was, how far gone
-        self.ticks, self.ticks_at = None, 0
+        self.current_ambience, self.ambience_at = None, 0
+        self.fading, self.fading_at, self.faded = None, 0, fade     # the Ambience going out, and how far
+        self.waiting = None                                         # an Ambience asked for mid-fade
+        self.current_tension, self.tension_at = None, 0
 
     def play(self, name):
         with self.lock:
@@ -99,27 +90,29 @@ class Mixer:
 
     def ambience(self, name):
         with self.lock:
-            if name != self.music:
-                self.fading, self.fading_at, self.faded = self.music, self.music_at, 0
-                self.music, self.music_at = name, 0
+            if self.faded < self.fade:
+                self.waiting = name
+            elif name != self.current_ambience:
+                self._fade_to(name)
 
     def tension(self, level):
         with self.lock:
-            if level != self.ticks:
-                self.ticks, self.ticks_at = level, 0
+            if level != self.current_tension:
+                self.current_tension, self.tension_at = level, 0
 
     def chunk(self, frames):
         with self.lock:
-            out = array.array("h", bytes(2 * frames))
+            out = silence(frames)
             if self.muted:
                 self.effect = None
                 return out
             if self.music_on:
-                add(out, self._music(frames))
-                if self.loops.get(self.ticks):
-                    add(out, looped(self.loops[self.ticks], self.ticks_at, frames))
-            self.music_at += frames
-            self.ticks_at += frames
+                add(out, self._ambience(frames))
+                if self.loops.get(self.current_tension):
+                    add(out, looped(self.loops[self.current_tension], self.tension_at, frames))
+            else:
+                self._ambience(frames)                  # keeps its place, and finishes any fade
+            self.tension_at += frames
             if self.effect is not None:
                 part = self.effect[self.effect_at:self.effect_at + frames]
                 add(out, part)
@@ -128,21 +121,30 @@ class Mixer:
                     self.effect = None
             return out
 
-    def _music(self, frames):
-        new = self._loop(self.music, self.music_at, frames)
+    def _fade_to(self, name):
+        self.fading, self.fading_at, self.faded = self.current_ambience, self.ambience_at, 0
+        self.current_ambience, self.ambience_at = name, 0
+
+    def _ambience(self, frames):
         if self.faded >= self.fade:
-            return new
-        old = self._loop(self.fading, self.fading_at, frames)
+            sound = self._loop(self.current_ambience, self.ambience_at, frames)
+            self.ambience_at += frames
+            return sound
         n = min(frames, self.fade - self.faded)
+        old = self._loop(self.fading, self.fading_at, n)
+        new = self._loop(self.current_ambience, self.ambience_at, n)
         mixed = array.array("h", (int(a + (b - a) * (self.faded + i) / self.fade)
-                                  for i, (a, b) in enumerate(zip(old[:n], new[:n]))))
-        self.fading_at += frames
-        self.faded += n
-        return mixed + new[n:]
+                                  for i, (a, b) in enumerate(zip(old, new))))
+        self.fading_at, self.ambience_at, self.faded = self.fading_at + n, self.ambience_at + n, self.faded + n
+        if self.faded >= self.fade and self.waiting is not None:
+            waiting, self.waiting = self.waiting, None
+            if waiting != self.current_ambience:
+                self._fade_to(waiting)
+        return mixed + self._ambience(frames - n) if frames > n else mixed
 
     def _loop(self, name, at, frames):
         loop = self.loops.get(name)
-        return looped(loop, at, frames) if loop else array.array("h", bytes(2 * frames))
+        return looped(loop, at, frames) if loop else silence(frames)
 
 
 # The stream leaves as 16-bit stereo at twice the mixer's rate, each sample repeated: what every system takes.
@@ -209,7 +211,7 @@ def linux_output():
 
 
 # Windows: waveOut, a few small buffers refilled as each one finishes.
-BUFFERS, BUFFER_SAMPLES = 6, 256          # about 70 ms queued in all
+BUFFERS, BUFFER_SAMPLES = 8, 256          # about 90 ms queued in all
 WAVE_MAPPER, CALLBACK_EVENT, WHDR_DONE = 0xFFFFFFFF, 0x50000, 1
 
 
@@ -273,22 +275,22 @@ def system_output():
 
 
 class Audio:
-    """What the screens play: effects, the Ambience and its tension, with sound and music switched by the Settings.
+    """What the screens play: effects, and the Ambience with its Tension, switched by the Settings.
 
     `silent` keeps everything off the speakers (the tests); `listener(name)` hears each effect
     that sounds, and `listener(None)` each time muting cuts it.
     """
 
     def __init__(self, silent=False, listener=None):
-        self.mixer = Mixer(effects(), {}, fade=FADE)
+        self.mixer = Mixer(effect_samples(), {}, fade=FADE)
         self.listener = listener
+        self.cued = (None, None)              # the Ambience and Tension last asked for
         start = None if silent else system_output()
         if start and start(lambda samples: widen(self.mixer.chunk(samples))):
             threading.Thread(target=self._compose, daemon=True).start()
 
     def _compose(self):
-        import music                          # music builds on this module's synthesis
-        for name in ("menu", "shallow", "middle", "deep", "tense", "urgent"):
+        for name in music.PIECES:             # the menu's first: it plays while the rest are composed
             self.mixer.loops[name] = music.compose(name)
 
     @property
@@ -315,10 +317,9 @@ class Audio:
             if self.listener:
                 self.listener(name)
 
-    def ambience(self, name):
-        """"menu", or the Sector of the player whose Turn it is."""
-        self.mixer.ambience(name)
-
-    def tension(self, level):
-        """None, "tense" while a Question is open, "urgent" in its last seconds."""
-        self.mixer.tension(level)
+    def cue(self, ambience, tension=None):
+        """The Ambience ("menu", or the Sector of the player whose Turn it is) and its Tension:
+        None, "tense" while a Question's clock runs, "urgent" in its last seconds."""
+        self.cued = (ambience, tension)
+        self.mixer.ambience(ambience)
+        self.mixer.tension(tension)
